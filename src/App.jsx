@@ -9,11 +9,11 @@ import {
 // production), use a relative base so the URL follows the current host/port
 // automatically. Set VYAS_DEV_API in the environment only when developing
 // the frontend separately (e.g. Vite dev server at a different port).
-const API_BASE = (typeof window !== "undefined" &&
-  window.location.hostname === "localhost" &&
-  window.location.port === "3000")
-  ? "http://localhost:8000"   // Vite / CRA dev only
-  : "";                       // relative — works on Oracle, GitHub Pages proxy, etc.
+const API_BASE = typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE 
+  ? import.meta.env.VITE_API_BASE 
+  : ((typeof window !== "undefined" && window.location.hostname === "localhost" && window.location.port === "3000") 
+    ? "http://localhost:8000" 
+    : "");
 
 // ================= Brand tokens (locked palette) =================
 const C = {
