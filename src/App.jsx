@@ -73,6 +73,22 @@ const EXAM_CONFIG = {
   },
 };
 
+// Maps a chosen paper to the subject label used in backend/data/qbank.json.
+// Subjects present there: GS, Geography, Sociology, Anthropology, PSIR,
+// History, Ethics. Keep these strings exactly as spelled in the qbank.
+const SUBJECT_BY_PAPER = {
+  "UPSC:gs4": "Ethics",
+  "UPSC:gs1": "GS",
+  "UPSC:gs2": "GS",
+  "UPSC:gs3": "GS",
+  "UPSC:essay": "GS",
+  "RAS:gs1": "GS",
+  "RAS:gs2": "GS",
+  "RAS:gs3": "GS",
+  "RAS:p4": "GS",
+};
+const RUBRIC_SUBJECT = { ethics: "Ethics", gs: "GS", essay: "GS", language: "GS" };
+
 // ================= Bilingual UI strings =================
 const T = {
   en: {
@@ -575,10 +591,17 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
     try {
       const form = new FormData();
       if (ansFileRef.current) form.append("answer", ansFileRef.current);
-      if (mode === "custom" && qpFileRef.current) form.append("question_paper", qpFileRef.current);
+      // Question paper is optional in every mode — send it only if attached.
+      if (qpFileRef.current) form.append("question_paper", qpFileRef.current);
       form.append("mode", mode);
       form.append("exam", examId);
       if (paperId) form.append("paper", paperId);
+      // Without this the backend received subject=None and every evaluation ran
+      // a subject-blind BM25 over all 30k topper rows — a GS-IV Ethics answer
+      // could be graded against a History or Anthropology topper copy that
+      // happened to share a few keywords.
+      const subject = SUBJECT_BY_PAPER[`${examId}:${paperId}`] || RUBRIC_SUBJECT[rubric];
+      if (subject) form.append("subject", subject);
 
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
       const submitRes = await fetch(`${API_BASE}/api/submit`, { method: "POST", headers, body: form });
@@ -665,14 +688,18 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
 
   // Use real results if available, else sample data
   const activeResult = apiResult || null;
-  const activeQuestions = activeResult?.questions || [];
+  // The backend payload puts the QUESTION ARRAY at data.questions.
+  const activeQuestions = Array.isArray(activeResult?.data?.questions)
+    ? activeResult.data.questions
+    : (Array.isArray(activeResult?.questions) ? activeResult.questions : []);
+  
   const avg = S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length;
   const awarded = Math.round((avg / 10) * marks * 10) / 10;
   const totalAwarded = activeResult
-    ? activeResult.questions.reduce((a, q) => a + (parseFloat(q.awarded_marks) || 0), 0)
+    ? (typeof activeResult.total_marks === "number" ? activeResult.total_marks : activeQuestions.reduce((a, q) => a + (parseFloat(q.awarded_marks) || 0), 0))
     : awarded;
   const totalOutOf = activeResult
-    ? activeResult.questions.reduce((a, q) => a + (parseFloat(q.max_marks) || 0), 0)
+    ? (typeof activeResult.out_of === "number" ? activeResult.out_of : activeQuestions.reduce((a, q) => a + (parseFloat(q.max_marks) || 0), 0))
     : marks;
   const pdfUrl = pdfDownloadUrl || null;
 
