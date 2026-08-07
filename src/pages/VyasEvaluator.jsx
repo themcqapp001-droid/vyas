@@ -1,31 +1,41 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import AppLayout from "./AppLayout";
 import { useAuth } from "../context/AuthContext";
-import { auth } from "../firebase";
 
 /* ─────────────────────────────────────────────────────────────────
    VYAS EVALUATOR — AI Answer Sheet Evaluator
-   Auth: uses the main site's Firebase login — no separate login needed.
-   API:  connects to mini_vyas Flask backend (VITE_VYAS_API_URL).
+   Auth: uses the main site's JWT login or a device token for guests.
+   API:  connects to VYAS API backend (VITE_VYAS_API_URL).
 ───────────────────────────────────────────────────────────────── */
 
 const VYAS_API = import.meta.env.VITE_VYAS_API_URL || "http://localhost:8000/api/v1";
 
-/** Get a fresh Firebase ID token; returns null if not signed in. */
-async function getFirebaseToken() {
-  try {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return null;
-    return await currentUser.getIdToken(/* forceRefresh */ false);
-  } catch {
-    return null;
+/** Get a fresh JWT token or fallback to a device token for guests. */
+async function getAuthToken() {
+  const vyasTok = localStorage.getItem("vyas_token");
+  if (vyasTok) return vyasTok;
+  
+  // Fallback to device token
+  let dTok = localStorage.getItem("vyas_device_token");
+  if (!dTok) {
+    try {
+      const res = await fetch(VYAS_API + "/auth/device", { method: "POST" });
+      const data = await res.json();
+      if (data.token) {
+        dTok = data.token;
+        localStorage.setItem("vyas_device_token", dTok);
+      }
+    } catch (e) {
+      console.error("Device token error", e);
+    }
   }
+  return dTok;
 }
 
 async function vyasRequest(path, opts = {}, token = null) {
   const headers = { ...(opts.headers || {}) };
-  // Auto-attach Firebase token if no token was explicitly supplied
-  const tok = token || (await getFirebaseToken());
+  // Auto-attach token if not explicitly supplied
+  const tok = token || (await getAuthToken());
   if (tok) headers["Authorization"] = `Bearer ${tok}`;
   if (opts.json) {
     headers["Content-Type"] = "application/json";
@@ -212,11 +222,10 @@ const PIPELINE_STEPS = [
 ];
 
 export default function VyasEvaluator() {
-  const { user: firebaseUser, loading: fbLoading } = useAuth();
+  const { user, loading: fbLoading, logout } = useAuth();
 
   // view: "loading" | "need-login" | "main"
   const [view, setView]             = useState("loading");
-  const [user, setUser]             = useState(null);
   const [serverOk, setServerOk]     = useState(null);
 
   const [uploads, setUploads]             = useState([]);
@@ -234,6 +243,7 @@ export default function VyasEvaluator() {
   const [isDragging, setIsDragging]     = useState(false);
   const [subject, setSubject]           = useState("Polity");
   const [exam, setExam]                 = useState("RAS");
+  const [paper, setPaper]               = useState("GS-1");
   const fileInputRef                    = useRef();
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
@@ -260,46 +270,36 @@ export default function VyasEvaluator() {
       .catch(() => setServerOk(false));
   }, []);
 
-  // ── Firebase auth → auto-login to mini_vyas ─────────────────────────────
-  // When the user is logged in to the main site (Firebase), we get their ID
-  // token and pass it to mini_vyas — no separate login needed.
+  // ── Auth → auto-login to VYAS_API ─────────────────────────────
+  // If user is logged in, use their token. Otherwise use device token.
   useEffect(() => {
     if (fbLoading) return;
-    if (!firebaseUser) {
-      setView("need-login");
-      return;
-    }
-    // User is logged in — use their Firebase token
-    firebaseUser.getIdToken().then(idToken => {
-      vyasRequest("/auth/me", {}, idToken)
-        .then(u => {
-          setUser(u);
-          setView("main");
-          loadUploads();
-        })
-        .catch(err => {
-          showToast(`Auth Error: ${err.message}`, true);
-          setView("main"); // still show main UI so uploads work if server is up
-        });
-    }).catch(() => setView("need-login"));
+    
+    getAuthToken().then(token => {
+      setView("main");
+      if (token) {
+        loadUploads();
+        loadHistory();
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firebaseUser, fbLoading]);
+  }, [fbLoading, user]);
 
   const setStep = (id, status) =>
     setPipelineSteps(prev => prev.map(s => s.id === id ? { ...s, status } : s));
 
   async function loadUploads() {
     try {
-      const data = await vyasRequest("/upload");
-      setUploads(Array.isArray(data) ? data : []);
+      const data = await vyasRequest("/submissions");
+      setUploads(data.submissions || []);
     } catch (e) { showToast(e.message, true); }
   }
 
   async function loadHistory() {
     setHistoryLoading(true);
     try {
-      const data = await vyasRequest("/history");
-      setHistoryItems(Array.isArray(data) ? data : []);
+      const data = await vyasRequest("/submissions");
+      setHistoryItems(data.submissions || []);
     } catch (e) { showToast(e.message, true); }
     finally { setHistoryLoading(false); }
   }
@@ -317,19 +317,27 @@ export default function VyasEvaluator() {
     setPipelineRunning(true);
     setPipelineSteps(PIPELINE_STEPS.map(s => ({ ...s, status: "waiting" })));
     setPdfBlobUrl(null); setPdfVisible(false);
-    let uploadId;
+    let jobId;
     try {
       setStep("upload", "running");
       const fd = new FormData();
-      fd.append("file", pendingFile);
+      fd.append("answer", pendingFile);
       fd.append("subject", subject);
       fd.append("exam", exam);
-      const upData = await vyasRequest("/upload", { method: "POST", body: fd });
-      uploadId = upData.upload_id;
+      fd.append("paper", paper);
+      fd.append("mode", "full");
+      const upData = await vyasRequest("/submit", { method: "POST", body: fd });
+      jobId = upData.job_id;
       setStep("upload", "done");
 
       setStep("evaluate", "running");
-      await vyasRequest(`/evaluate/upload/${uploadId}`, { method: "POST" });
+      let jobData;
+      while (true) {
+        jobData = await vyasRequest(`/jobs/${jobId}`);
+        if (jobData.status === "done" || jobData.status === "error") break;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      if (jobData.status === "error") throw new Error(jobData.error || "Evaluation failed");
       setStep("evaluate", "done");
 
       setStep("annotate", "running");
@@ -339,8 +347,9 @@ export default function VyasEvaluator() {
       showToast("Evaluation complete! Red ink report ready. ✅");
       setPendingFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      await loadHistory();
       await loadUploads();
-      await handleSelectUpload(uploadId);
+      await handleSelectUpload(jobId);
     } catch (err) {
       const running = pipelineSteps.find(s => s.status === "running");
       if (running) setStep(running.id, "error");
@@ -350,56 +359,49 @@ export default function VyasEvaluator() {
     }
   }
 
-  async function handleSelectUpload(uploadId) {
+  async function handleSelectUpload(jobId) {
     try {
-      const upData = await vyasRequest(`/upload/${uploadId}`);
-      setActiveUpload(upData);
-      setUploads(prev => prev.map(u => u.upload_id === uploadId ? upData : u));
-      const qs = await vyasRequest(`/document/${uploadId}/questions`);
-      const qArr = Array.isArray(qs) ? qs : [];
-      setQuestions(qArr);
-      if (qArr.length) handleSelectQuestion(qArr[0].question_id, qArr);
+      const baseUrl = VYAS_API.replace('/api/v1', '').replace('/api', '');
+      const res = await fetch(`${baseUrl}/results/${jobId}_result.json`);
+      if (!res.ok) throw new Error("Could not load result data");
+      const payload = await res.json();
+      
+      setActiveUpload({ ...payload, upload_id: jobId, code: jobId });
+      
+      const qs = payload.data?.questions || [];
+      setQuestions(qs);
+      if (qs.length > 0) handleSelectQuestion(qs[0].q_no, qs);
       else setReport(null);
     } catch (err) { showToast(err.message, true); }
   }
 
-  async function handleSelectQuestion(qId, qs = questions) {
-    setActiveQId(qId);
-    try {
-      const ev = await vyasRequest(`/evaluate/question/${qId}`);
-      setReport({ ev, q: (qs || questions).find(x => x.question_id === qId) || {} });
-    } catch (err) {
-      setReport({ ev: null, q: {}, error: err.message });
-    }
+  function handleSelectQuestion(qNo, qs = questions) {
+    setActiveQId(qNo);
+    const qData = (qs || questions).find(x => x.q_no === qNo) || {};
+    setReport({ ev: qData, q: qData });
   }
 
   async function toggleAnnotatedPdf() {
     if (pdfVisible) { setPdfVisible(false); return; }
-    try {
-      const tok = await getFirebaseToken();
-      const res = await fetch(
-        `${VYAS_API}/evaluate/upload/${activeUpload.upload_id}/annotated-pdf`,
-        { headers: tok ? { Authorization: `Bearer ${tok}` } : {} }
-      );
-      if (!res.ok) throw new Error("Could not fetch annotated PDF");
-      const blob = await res.blob();
-      setPdfBlobUrl(URL.createObjectURL(blob));
+    if (activeUpload?.pdf_url) {
+      const baseUrl = VYAS_API.replace('/api/v1', '').replace('/api', '');
+      setPdfBlobUrl(`${baseUrl}${activeUpload.pdf_url}`);
       setPdfVisible(true);
-    } catch (err) { showToast(err.message, true); }
+    } else {
+      showToast("No annotated PDF available", true);
+    }
   }
 
-  async function downloadPdf() {
-    try {
-      const res = await fetch(
-        `${VYAS_API}/evaluate/upload/${activeUpload.upload_id}/annotated-pdf`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const blob = await res.blob();
+  function downloadPdf() {
+    if (activeUpload?.pdf_url) {
+      const baseUrl = VYAS_API.replace('/api/v1', '').replace('/api', '');
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `evaluated_${activeUpload.filename}`;
+      a.href = `${baseUrl}${activeUpload.pdf_url}`;
+      a.download = `evaluated_${activeUpload.code || 'paper'}.pdf`;
       a.click();
-    } catch (err) { showToast(err.message, true); }
+    } else {
+      showToast("No annotated PDF available", true);
+    }
   }
 
   // ── RENDERS ────────────────────────────────────────────────────────
@@ -449,30 +451,35 @@ export default function VyasEvaluator() {
       </div>
     );
     const { ev, q } = report;
-    const dims = [
-      { label: "Content",      val: ev.content_score      || 0 },
-      { label: "Analysis",     val: ev.analysis_score     || 0 },
-      { label: "Presentation", val: ev.presentation_score || 0 },
-      { label: "Language",     val: ev.language_score     || 0 },
-    ];
+    
+    // Safety fallback
+    if (!ev || !q) return null;
+
+    const rub = ev.rubric_100 || {};
+    const grid = ev.grid || {};
+    
+    // Overall macro comments from the whole upload (activeUpload.data)
+    const macro = activeUpload?.data?.overall_macro_comments || [];
+    const verdict = activeUpload?.data?.booklet_verdict || "";
+
     return (
       <div className="vyas-report">
         <div className="vyas-score-hero">
           <div>
-            <div className="vyas-score-label">📝 Predicted Score</div>
+            <div className="vyas-score-label">📝 Awarded Score</div>
             <div>
-              <span className="vyas-score-num">{ev.predicted_marks}</span>
-              <span className="vyas-score-denom">/ {q.marks || "?"}</span>
+              <span className="vyas-score-num">{ev.awarded_marks || 0}</span>
+              <span className="vyas-score-denom">/ {ev.max_marks || "?"}</span>
             </div>
-            {q.question_text && (
+            {ev.detected_question && (
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.75, maxWidth: 380, lineHeight: 1.5 }}>
-                Q: {q.question_text.slice(0, 120)}{q.question_text.length > 120 ? "…" : ""}
+                Q: {ev.detected_question.slice(0, 120)}{ev.detected_question.length > 120 ? "…" : ""}
               </div>
             )}
           </div>
           <div className="vyas-confidence">
-            <div className="vyas-conf-val">{(ev.confidence || 0).toFixed(0)}%</div>
-            <div className="vyas-conf-label">Confidence</div>
+            <div className="vyas-conf-val">{(rub.total || 0).toFixed(0)}</div>
+            <div className="vyas-conf-label">Rubric / 100</div>
           </div>
         </div>
 
@@ -483,34 +490,43 @@ export default function VyasEvaluator() {
             </div>
             <div className="vyas-qchips">
               {questions.map(qq => (
-                <button key={qq.question_id}
-                  className={`vyas-qchip${qq.question_id === activeQId ? " active" : ""}`}
-                  onClick={() => handleSelectQuestion(qq.question_id)}>
-                  Q{qq.question_number || "?"} · {qq.marks}m
+                <button key={qq.q_no}
+                  className={`vyas-qchip${qq.q_no === activeQId ? " active" : ""}`}
+                  onClick={() => handleSelectQuestion(qq.q_no)}>
+                  Q{qq.q_no || "?"} · {qq.max_marks}m
                 </button>
               ))}
             </div>
           </div>
         )}
 
+        {/* Global Booklet Comments */}
+        {(verdict || macro.length > 0) && (
+          <div className="vyas-panel" style={{ background: "var(--gold-soft)", borderColor: "var(--gold-dark)" }}>
+            <div className="vyas-panel-title" style={{ color: "var(--maroon)" }}>📖 Overall Feedback</div>
+            {verdict && <p style={{ fontWeight: 700, marginBottom: 10, fontSize: 13 }}>{verdict}</p>}
+            {macro.map((m, i) => <div key={i} className="vyas-note-line" style={{ fontSize: 13 }}>{m}</div>)}
+          </div>
+        )}
+
         <div className="vyas-panel">
           <div className="vyas-panel-title">📊 Dimension Scores</div>
           <div className="vyas-dims">
-            {dims.map(d => (
-              <div key={d.label} className="vyas-dim-row">
-                <div className="vyas-dim-name">{d.label}</div>
-                <div className="vyas-dim-track">
-                  <div className="vyas-dim-fill" style={{ width: `${Math.max(d.val, 2)}%` }}></div>
+            {Object.keys(rub).filter(k => k !== "total" && rub[k] && typeof rub[k] === "object").map(k => {
+              const d = rub[k];
+              const pct = d.max ? (d.score / d.max) * 100 : 0;
+              return (
+                <div key={k} className="vyas-dim-row" style={{ gridTemplateColumns: "150px 1fr 100px" }}>
+                  <div className="vyas-dim-name" style={{ textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</div>
+                  <div className="vyas-dim-track">
+                    <div className="vyas-dim-fill" style={{ width: `${Math.max(pct, 2)}%` }}></div>
+                  </div>
+                  <div className="vyas-dim-val">{d.score} / {d.max}</div>
                 </div>
-                <div className="vyas-dim-val">{d.val.toFixed(0)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-
-        {ev.overall_comment && (
-          <div className="vyas-comment">"{ev.overall_comment}"</div>
-        )}
 
         <div className="vyas-notes-grid">
           <div className="vyas-notes-col strengths">
@@ -521,13 +537,13 @@ export default function VyasEvaluator() {
           </div>
           <div className="vyas-notes-col weaknesses">
             <h4>⚠️ Needs Work</h4>
-            {(ev.weaknesses || []).length > 0
-              ? ev.weaknesses.map((s, i) => <div key={i} className="vyas-note-line">{s}</div>)
+            {(ev.improvements || []).length > 0
+              ? ev.improvements.map((s, i) => <div key={i} className="vyas-note-line">{s}</div>)
               : <div style={{ fontSize: 13, opacity: 0.6 }}>None flagged.</div>}
           </div>
         </div>
 
-        {activeUpload?.evaluation_status === "completed" && (
+        {activeUpload?.pdf_url && (
           <div>
             <div className="vyas-pdf-actions">
               <button className="vyas-btn vyas-btn-ghost vyas-btn-sm" onClick={toggleAnnotatedPdf}>
@@ -564,18 +580,16 @@ export default function VyasEvaluator() {
             <div className="vyas-panel" style={{ padding: 16 }}>
               <div className="vyas-user-chip">
                 <div className="vyas-user-avatar">
-                  {firebaseUser?.photoURL
-                    ? <img src={firebaseUser.photoURL} alt="" style={{ width: 32, height: 32, borderRadius: "50%" }} />
-                    : (user.first_name || "U")[0].toUpperCase()}
+                  {(user.name || user.email || "U")[0].toUpperCase()}
                 </div>
                 <div>
-                  <div className="vyas-user-name">{user.first_name} {user.last_name}</div>
+                  <div className="vyas-user-name">{user.name || "Student"}</div>
                   <div className="vyas-user-role">{user.email}</div>
                 </div>
               </div>
               <button className="vyas-btn vyas-btn-ghost vyas-btn-sm"
                 style={{ width: "100%", marginTop: 4 }}
-                onClick={() => { import("../firebase").then(m => m.auth.signOut()); }}
+                onClick={() => { logout(); window.location.reload(); }}
               >
                 Sign Out
               </button>
@@ -617,6 +631,14 @@ export default function VyasEvaluator() {
                 <span className="vyas-meta-label">Exam</span>
                 <select className="vyas-select" value={exam} onChange={e => setExam(e.target.value)}>
                   {["RAS","UPSC","RAS Mains","UPSC Mains","State PCS"].map(s => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span className="vyas-meta-label">Paper</span>
+                <select className="vyas-select" value={paper} onChange={e => setPaper(e.target.value)}>
+                  {["GS-1","GS-2","GS-3","GS-4","Essay","Optional"].map(s => (
                     <option key={s}>{s}</option>
                   ))}
                 </select>

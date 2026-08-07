@@ -118,35 +118,39 @@ export default function Auth() {
     document.head.appendChild(l);
   }, []);
 
-  const handleGoogleSignIn = async () => {
-    setError(""); setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      navigate("/dashboard");
-    } catch (err) {
-      setError(err.message.replace("Firebase:", "").trim());
-    } finally { setLoading(false); }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault(); setError(""); setLoading(true);
     try {
+      const VYAS_API = import.meta.env.VITE_VYAS_API_URL || "http://localhost:8000/api/v1";
+      const baseUrl = VYAS_API.replace('/api/v1', '/api'); 
+      const endpoint = isSignUp ? "/auth/signup" : "/auth/login";
+      
+      const body = new FormData();
+      body.append("email", email.trim());
+      body.append("password", password);
       if (isSignUp) {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(cred.user, { displayName: name || "Student" });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        body.append("name", name.trim() || "Student");
+        body.append("exam", "UPSC"); // default or add select
       }
-      navigate("/dashboard");
+
+      const res = await fetch(`${baseUrl}${endpoint}`, {
+        method: "POST",
+        body: body,
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || "Authentication failed");
+      }
+      
+      // Update AuthContext (the context now has a login function)
+      // We will just set the token and call refreshUser
+      localStorage.setItem("vyas_token", data.token);
+      window.location.href = "/dashboard"; // hard reload to trigger context fetch
     } catch (err) {
-      if (err.code === "auth/email-already-in-use") setError("This email is already in use.");
-      else if (err.code === "auth/invalid-credential") setError("Invalid email or password.");
-      else if (err.code === "auth/weak-password") setError("Password should be at least 6 characters.");
-      else setError(err.message.replace("Firebase:", "").trim());
+      setError(err.message);
     } finally { setLoading(false); }
   };
-
   const inputStyle = (focused) => ({
     width: "100%",
     paddingLeft: 42, paddingRight: 14, paddingTop: 11, paddingBottom: 11,
@@ -364,34 +368,6 @@ export default function Auth() {
                 {!loading && <ArrowRight size={16} />}
               </button>
 
-              {/* OR */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0", color: C.textMuted, fontSize: 11 }}>
-                <div style={{ flex: 1, height: 1, background: C.divider }} />
-                <span style={{ fontWeight: 600 }}>OR</span>
-                <div style={{ flex: 1, height: 1, background: C.divider }} />
-              </div>
-
-              {/* Google */}
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={loading || !agreed}
-                style={{
-                  width: "100%", padding: "11px", borderRadius: 12,
-                  border: `1.5px solid ${C.googleBorder}`,
-                  background: C.googleBg, color: C.googleText,
-                  fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600,
-                  cursor: (!agreed || loading) ? "not-allowed" : "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                  opacity: (!agreed || loading) ? 0.55 : 1,
-                  transition: "opacity .2s",
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-                  <path fill="#EA4335" d="M21.805 10.023H12v3.955h5.63C17.078 15.92 15.21 17 12 17a5.5 5.5 0 1 1 0-11c1.47 0 2.79.56 3.8 1.47L18.7 4.57A9.96 9.96 0 0 0 12 2C6.477 2 2 6.477 2 12s4.477 10 10 10c5.523 0 9.8-3.873 9.8-9.5 0-.652-.068-1.298-.195-1.977z"/>
-                </svg>
-                Continue with Google
-              </button>
             </form>
 
             {/* Toggle sign in / sign up */}

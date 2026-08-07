@@ -666,14 +666,17 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
 
   // Use real results if available, else sample data
   const activeResult = apiResult || null;
-  const activeQuestions = activeResult?.questions || [];
+  const activeQuestions = Array.isArray(activeResult?.data?.questions)
+    ? activeResult.data.questions 
+    : (Array.isArray(activeResult?.questions) ? activeResult.questions : []);
+  
   const avg = S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length;
   const awarded = Math.round((avg / 10) * marks * 10) / 10;
   const totalAwarded = activeResult
-    ? activeResult.questions.reduce((a, q) => a + (parseFloat(q.awarded_marks) || 0), 0)
+    ? (typeof activeResult.total_marks === "number" ? activeResult.total_marks : activeQuestions.reduce((a, q) => a + (parseFloat(q.awarded_marks) || 0), 0))
     : awarded;
   const totalOutOf = activeResult
-    ? activeResult.questions.reduce((a, q) => a + (parseFloat(q.max_marks) || 0), 0)
+    ? (typeof activeResult.out_of === "number" ? activeResult.out_of : activeQuestions.reduce((a, q) => a + (parseFloat(q.max_marks) || 0), 0))
     : marks;
   const pdfUrl = pdfDownloadUrl || null;
 
