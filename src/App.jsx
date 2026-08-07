@@ -471,10 +471,12 @@ const primaryBtn = { background: C.maroon, color: C.cream, border: "none", borde
 const outlineBtn = { background: C.paper, color: C.maroon, border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: "13px 24px", fontWeight: 600, fontSize: 15, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 };
 
 // ================= Main =================
-export default function VyasUI({ examId: initialExam = "UPSC" }) {
+export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
   const [examId, setExamId] = useState(initialExam);
   const [lang, setLang] = useState("en");
   const [stage, setStage] = useState("mode");
+  const [historyList, setHistoryList] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [mode, setMode] = useState(null);
   const [paperId, setPaperId] = useState(null);
   const [unitId, setUnitId] = useState(null);
@@ -578,7 +580,8 @@ export default function VyasUI({ examId: initialExam = "UPSC" }) {
       form.append("exam", examId);
       if (paperId) form.append("paper", paperId);
 
-      const submitRes = await fetch(`${API_BASE}/api/submit`, { method: "POST", body: form });
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const submitRes = await fetch(`${API_BASE}/api/submit`, { method: "POST", headers, body: form });
       const submitData = await submitRes.json();
       if (!submitRes.ok) throw new Error(submitData.error || "Upload failed");
       const jid = submitData.job_id;
@@ -588,6 +591,19 @@ export default function VyasUI({ examId: initialExam = "UPSC" }) {
     } catch (err) {
       setApiError(err.message);
       setStage("apiError");
+    }
+  };
+
+  const fetchHistory = async () => {
+    try {
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch(`${API_BASE}/api/submissions`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryList(data.submissions || []);
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -790,6 +806,15 @@ export default function VyasUI({ examId: initialExam = "UPSC" }) {
               );
             })}
           </div>
+          {token && (
+            <button onClick={() => { setShowHistory(!showHistory); if (!historyList) fetchHistory(); }} className="vyas-btn"
+              style={{ border: `1px solid ${C.gold}55`, cursor: "pointer", borderRadius: 30, padding: "7px 16px", fontSize: 13, fontWeight: 700,
+                background: showHistory ? `linear-gradient(135deg, ${C.gold}, #A87E1A)` : "transparent",
+                color: showHistory ? C.maroon : C.goldSoft }}>
+              <BookOpen size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "middle" }} />
+              History
+            </button>
+          )}
           <div role="group" aria-label="Language" style={{ display: "inline-flex", background: "rgba(251,243,230,0.07)", borderRadius: 30, padding: 3, border: `1px solid rgba(201,162,39,.3)`, backdropFilter: "blur(8px)" }}>
             {[{ id: "en", label: "EN" }, { id: "hi", label: "हिं" }].map((o) => {
               const active = lang === o.id;
@@ -809,8 +834,32 @@ export default function VyasUI({ examId: initialExam = "UPSC" }) {
       </header>
 
       <main style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px 80px", position: "relative", zIndex: 1 }}>
+        {/* -------- HISTORY -------- */}
+        {showHistory && (
+          <div className="fade-in" style={{ background: C.paper, borderRadius: 24, padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.1)", marginBottom: 32, border: `1px solid ${C.gold}44` }}>
+            <h2 style={{ color: C.maroon, marginTop: 0 }}>My Submissions</h2>
+            {!historyList ? <p>Loading...</p> : historyList.length === 0 ? <p>No submissions found.</p> : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 24 }}>
+                {historyList.map(sub => (
+                  <div key={sub.code} style={{ padding: 16, border: `1px solid ${C.gold}33`, borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff" }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: C.ink }}>{sub.exam} {sub.paper && `- ${sub.paper}`}</div>
+                      <div style={{ fontSize: 13, color: C.inkSoft }}>{new Date(sub.created * 1000).toLocaleString()} · {sub.total_marks} / {sub.out_of} marks</div>
+                    </div>
+                    {sub.pdf_url && (
+                      <a href={`${API_BASE}${sub.pdf_url}`} target="_blank" rel="noreferrer" style={{ background: C.maroon, color: C.cream, border: "none", borderRadius: 12, padding: "8px 16px", fontWeight: 600, fontSize: 13, textDecoration: "none" }}>
+                        <Download size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "middle" }} /> PDF
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* -------- MODE -------- */}
-        {stage === "mode" && (
+        {stage === "mode" && !showHistory && (
           <div className="fade-in">
             <div style={{ marginBottom: 32, textAlign: "center" }}>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: `${C.maroon}15`, border: `1px solid ${C.maroon}30`, borderRadius: 20, padding: "6px 16px", marginBottom: 16 }}>
