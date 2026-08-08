@@ -1022,38 +1022,6 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
               })}
             </div>
 
-            {mode === "custom" && (
-              <>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.inkSoft, marginBottom: 8 }}>{t.chooseType}</div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
-                  {paper.units.map((u) => {
-                    const active = unitId === u.id;
-                    return (
-                      <button key={u.id} className="vyas-btn" onClick={() => setUnitId(u.id)}
-                        style={{ padding: "8px 16px", borderRadius: 30, border: `1.5px solid ${active ? C.gold : C.creamDeep}`, background: active ? "#FBF7EA" : C.paper, color: C.ink, fontWeight: 600, fontSize: 13.5, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                        {u.daily && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: C.cream, background: C.maroon, padding: "2px 7px", borderRadius: 20 }}>{t.dailyBadge}</span>}
-                        {u.label[lang]}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.inkSoft, marginBottom: 8 }}>{t.howMany}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 26 }}>
-                  <button className="vyas-btn" aria-label="decrease" onClick={() => setNumQ((n) => Math.max(1, n - 1))}
-                    style={{ width: 40, height: 40, borderRadius: 10, border: `1.5px solid ${C.creamDeep}`, background: C.paper, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                    <Minus size={18} color={C.maroon} />
-                  </button>
-                  <div style={{ fontFamily: ff.display, fontSize: 24, fontWeight: 700, color: C.maroon, minWidth: 30, textAlign: "center" }}>{numQ}</div>
-                  <button className="vyas-btn" aria-label="increase" onClick={() => setNumQ((n) => Math.min(10, n + 1))}
-                    style={{ width: 40, height: 40, borderRadius: 10, border: `1.5px solid ${C.creamDeep}`, background: C.paper, cursor: "pointer", display: "grid", placeItems: "center" }}>
-                    <Plus size={18} color={C.maroon} />
-                  </button>
-                  <span style={{ color: C.inkSoft, fontSize: 14 }}>{numQ === 1 ? t.questionWord : t.questionsWord}</span>
-                </div>
-              </>
-            )}
-
             <button className="vyas-btn" onClick={() => changeStage("upload")} style={primaryBtn}>{t.continue} <ArrowRight size={17} /></button>
           </div>
         )}
@@ -1273,6 +1241,11 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                   </div>
                 );
               })}
+            </div>
+            <div style={{ marginTop: 32, textAlign: "center" }}>
+              <button className="vyas-btn" onClick={reset} style={{ background: "transparent", color: C.inkSoft, border: `1px solid ${C.creamDeep}`, padding: "10px 20px", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <RotateCcw size={15} /> Cancel Evaluation
+              </button>
             </div>
           </div>
         )}
