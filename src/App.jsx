@@ -4,6 +4,25 @@ import {
   Download, BookOpen, Feather, Layers, AlertTriangle, Search, Minus, Plus, UserCheck,
 } from "lucide-react";
 
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, errorInfo) { console.error("UI Crash:", error, errorInfo); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', color: '#5C0F14' }}>
+          <h2>Oops! Something went wrong rendering the result.</h2>
+          <p>{this.state.error?.message}</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', cursor: 'pointer' }}>Reload App</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ========= Backend API URL =========
 // When the JSX is served by the FastAPI backend itself (local dev OR Oracle
 // production), use a relative base so the URL follows the current host/port
@@ -503,7 +522,28 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
   const [step, setStep] = useState(0);
   const [cushionText, setCushionText] = useState("");
   const [editingCushion, setEditingCushion] = useState(false);
+  
   const [evalType, setEvalType] = useState(null); // 'ai' | 'mentor'
+
+  // Back button & Timing & Notifications
+  const [evalStartTime, setEvalStartTime] = useState(null);
+  const [evalTimeTaken, setEvalTimeTaken] = useState(null);
+
+  const changeStage = (newStage) => {
+    changeStage(newStage);
+    window.history.pushState({ stage: newStage }, "", ?stage=);
+  };
+
+  useEffect(() => {
+    const handlePop = (e) => {
+      if (e.state && e.state.stage) setStage(e.state.stage);
+      else setStage("mode");
+    };
+    window.addEventListener("popstate", handlePop);
+    window.history.replaceState({ stage: "mode" }, "", "?stage=mode");
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
+
 
   // ---- Real backend state ----
   const [jobId, setJobId] = useState(null);
@@ -541,7 +581,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
     setPaperId(first.id);
     setUnitId(first.units[0].id);
     setNumQ(1); setQUp(false); setAUp(false);
-    setStage("config");
+    changeStage("config");
   };
   const choosePaper = (id) => {
     setPaperId(id);
@@ -549,11 +589,11 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
     setUnitId(p.units[0].id);
   };
   const proceedFromQuestion = () => {
-    if (rubric === "language") { setStage("evalChoice"); }
-    else { setCushionText(S.cushion); setEditingCushion(false); setStage("cushion"); }
+    if (rubric === "language") { changeStage("evalChoice"); }
+    else { setCushionText(S.cushion); setEditingCushion(false); changeStage("cushion"); }
   };
-  const scanForQuestion = (noQ) => { setAUp(true); setForceNoQ(noQ); setStage("scanning"); };
-  const confirmCushion = () => setStage("evalChoice");
+  const scanForQuestion = (noQ) => { setAUp(true); setForceNoQ(noQ); changeStage("scanning"); };
+  const confirmCushion = () => changeStage("evalChoice");
 
   // ---- Real backend submission ----
   const startPolling = (jid) => {
@@ -565,25 +605,31 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
         if (job.percent !== undefined) setApiProgress({ percent: job.percent, message: job.message || "" });
         if (job.status === "done") {
           clearInterval(pollRef.current);
+          if (evalStartTime) setEvalTimeTaken(Math.round((Date.now() - evalStartTime) / 1000));
+          
+          if (Notification.permission === "granted") {
+            new Notification("Evaluation Complete!", { body: "Your Vyas Mains evaluation is ready." });
+          }
+
           if (job.result && job.result.success === false) {
             setApiError(job.result.reason || "Evaluation failed during processing");
-            setStage("apiError");
+            changeStage("apiError");
           } else {
             setApiResult(job.result);
             if (job.pdf_url) setPdfDownloadUrl(`${API_BASE}${job.pdf_url}`);
-            setStage("result");
+            changeStage("result");
           }
           localStorage.removeItem("vyas_active_job");
         } else if (job.status === "error") {
           clearInterval(pollRef.current);
           setApiError(job.error || "Evaluation failed");
-          setStage("apiError");
+          changeStage("apiError");
           localStorage.removeItem("vyas_active_job");
         }
       } catch (e) {
         clearInterval(pollRef.current);
         setApiError(e.message);
-        setStage("apiError");
+        changeStage("apiError");
         localStorage.removeItem("vyas_active_job");
       }
     }, 2000);
@@ -617,7 +663,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
       startPolling(jid);
     } catch (err) {
       setApiError(err.message);
-      setStage("apiError");
+      changeStage("apiError");
     }
   };
 
@@ -637,17 +683,22 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
   const startAIEval = () => {
     setEvalType("ai");
     setStep(0);
+    setEvalStartTime(Date.now());
+    setEvalTimeTaken(null);
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
     // If real files are attached, call the backend; otherwise fall back to demo.
     if (ansFileRef.current) {
-      setStage("evaluating");
+      changeStage("evaluating");
       submitToBackend();
     } else {
-      setStage("evaluating");
+      changeStage("evaluating");
     }
   };
-  const sendToMentor = () => { setEvalType("mentor"); setStage("mentorSent"); };
+  const sendToMentor = () => { setEvalType("mentor"); changeStage("mentorSent"); };
   const reset = () => {
-    setStage("mode"); setMode(null); setPaperId(null); setUnitId(null);
+    changeStage("mode"); setMode(null); setPaperId(null); setUnitId(null);
     setNumQ(1); setQUp(false); setAUp(false); setForceNoQ(false); setStep(0); setEditingCushion(false); setEvalType(null);
     setJobId(null); setApiResult(null); setApiError(null); setApiProgress(null); setPdfDownloadUrl(null);
     ansFileRef.current = null; qpFileRef.current = null;
@@ -660,7 +711,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
     const activeJid = localStorage.getItem("vyas_active_job");
     if (activeJid) {
       setJobId(activeJid);
-      setStage("evaluating");
+      changeStage("evaluating");
       setEvalType("ai");
       setApiProgress({ percent: 0, message: "Reconnecting to your evaluation..." });
       startPolling(activeJid);
@@ -671,7 +722,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
 
   useEffect(() => {
     if (stage !== "scanning") return;
-    const to = setTimeout(() => (forceNoQ ? setStage("noQuestion") : proceedFromQuestion()), 1500);
+    const to = setTimeout(() => (forceNoQ ? changeStage("noQuestion") : proceedFromQuestion()), 1500);
     return () => clearTimeout(to);
   }, [stage, forceNoQ]); // eslint-disable-line
 
@@ -679,7 +730,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
   useEffect(() => {
     if (stage !== "evaluating" || jobId) return;
     if (step < evalSteps.length) { const to = setTimeout(() => setStep((s) => s + 1), 820); return () => clearTimeout(to); }
-    const to = setTimeout(() => setStage("result"), 500); return () => clearTimeout(to);
+    const to = setTimeout(() => changeStage("result"), 500); return () => clearTimeout(to);
   }, [stage, step, jobId]); // eslint-disable-line
 
   // Sync step indicator with real API progress
@@ -861,6 +912,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
       </header>
 
       <main style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px 80px", position: "relative", zIndex: 1 }}>
+        <ErrorBoundary>
         {/* -------- HISTORY -------- */}
         {showHistory && (
           <div className="fade-in" style={{ background: C.paper, borderRadius: 24, padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.1)", marginBottom: 32, border: `1px solid ${C.gold}44` }}>
@@ -984,14 +1036,14 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
               </>
             )}
 
-            <button className="vyas-btn" onClick={() => setStage("upload")} style={primaryBtn}>{t.continue} <ArrowRight size={17} /></button>
+            <button className="vyas-btn" onClick={() => changeStage("upload")} style={primaryBtn}>{t.continue} <ArrowRight size={17} /></button>
           </div>
         )}
 
         {/* -------- UPLOAD -------- */}
         {stage === "upload" && paper && (
           <div className="fade-in">
-            <button onClick={() => setStage("config")} className="vyas-btn" style={{ background: "transparent", border: "none", color: C.maroon, fontWeight: 600, fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 12 }}>← {t.changeMode}</button>
+            <button onClick={() => changeStage("config")} className="vyas-btn" style={{ background: "transparent", border: "none", color: C.maroon, fontWeight: 600, fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 12 }}>← {t.changeMode}</button>
             <div style={{ display: "inline-block", fontSize: 12, fontWeight: 600, color: C.gold, letterSpacing: 0.5, marginBottom: 14 }}>{ctxLine}</div>
 
             {mode === "full" && (
@@ -1051,7 +1103,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <button className="vyas-btn" onClick={() => document.getElementById("up-sep").click()} style={primaryBtn}><Upload size={17} /> {t.uploadQSep}</button>
               <input id="up-sep" type="file" accept={ACCEPT} hidden onChange={proceedFromQuestion} />
-              <button className="vyas-btn" onClick={() => setStage("denied")} style={outlineBtn}>{t.noHaveQ}</button>
+              <button className="vyas-btn" onClick={() => changeStage("denied")} style={outlineBtn}>{t.noHaveQ}</button>
             </div>
           </div>
         )}
@@ -1063,7 +1115,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
             <h1 style={{ fontFamily: ff.display, fontSize: 25, fontWeight: 700, color: C.maroon, margin: "0 0 8px" }}>{t.deniedTitle}</h1>
             <p style={{ color: C.inkSoft, fontSize: 15, margin: "0 0 22px", maxWidth: 580, lineHeight: 1.6 }}>{t.deniedDesc}</p>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="vyas-btn" onClick={() => setStage("noQuestion")} style={primaryBtn}><Upload size={17} /> {t.addQuestion}</button>
+              <button className="vyas-btn" onClick={() => changeStage("noQuestion")} style={primaryBtn}><Upload size={17} /> {t.addQuestion}</button>
               <button className="vyas-btn" onClick={reset} style={outlineBtn}><RotateCcw size={16} /> {t.startOver}</button>
             </div>
           </div>
@@ -1296,6 +1348,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
             </div>
           </div>
         )}
+              </ErrorBoundary>
       </main>
     </div>
   );
