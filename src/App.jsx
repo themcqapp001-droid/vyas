@@ -703,12 +703,13 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
-    // If real files are attached, call the backend; otherwise fall back to demo.
+    // If real files are attached, call the backend; otherwise alert the user
     if (ansFileRef.current) {
       changeStage("evaluating");
       submitToBackend();
     } else {
-      changeStage("evaluating");
+      alert("No answer copy found! Please go back and re-upload your file.");
+      reset();
     }
   };
   const sendToMentor = () => { setEvalType("mentor"); changeStage("mentorSent"); };
@@ -1095,7 +1096,6 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                 <FormatChips label={t.formats} />
                 <div style={{ marginTop: 16, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
                   <button className="vyas-btn" onClick={() => document.getElementById("up-ca").click()} style={primaryBtn}>{t.continue} <ArrowRight size={17} /></button>
-                  <button onClick={() => scanForQuestion(true)} className="vyas-btn" style={{ background: "transparent", border: "none", color: C.inkSoft, fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>{t.previewNoQ}</button>
                 </div>
               </>
             )}
@@ -1119,7 +1119,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
             <p style={{ color: C.inkSoft, fontSize: 15, margin: "0 0 22px", maxWidth: 560, lineHeight: 1.55 }}>{t.noQDesc}</p>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <button className="vyas-btn" onClick={() => document.getElementById("up-sep").click()} style={primaryBtn}><Upload size={17} /> {t.uploadQSep}</button>
-              <input id="up-sep" type="file" accept={ACCEPT} hidden onChange={proceedFromQuestion} />
+              <input id="up-sep" type="file" accept={ACCEPT} hidden onChange={(e) => { qpFileRef.current = e.target.files[0]; proceedFromQuestion(); }} />
               <button className="vyas-btn" onClick={() => changeStage("denied")} style={outlineBtn}>{t.noHaveQ}</button>
             </div>
           </div>
