@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Prevent Tailwind base styles from overriding page backgrounds */
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}

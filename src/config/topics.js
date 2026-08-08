@@ -1,0 +1,34 @@
+/**
+ * topics.js — Exam-scoped topic lists for the AI Generator.
+ *
+ * IAS_TOPICS = the existing DATABASE_TOPICS array lifted out of AiGenerator.jsx (unchanged).
+ * RAS_TOPICS = PENDING — send me the RPSC syllabus topic list (text or JSON) and I'll fill it.
+ *              The placeholder below is a first-cut skeleton from the RPSC Prelims
+ *              syllabus so the page does not crash; treat it as DRAFT, not final.
+ */
+
+export const IAS_TOPICS = [
+  "AGRICULTURE IN INDIA", "Ancient History", "BIOLOGY", "BIOTECHNOLOGY", "DEFENCE",
+  "ECONOMIC GEOGRAPHY OF INDIA", "ENVIRONMENT AND ECOLOGY", "ETHICS INTEGRITY AND APTITUDE",
+  "GOVERNANCE", "HUMAN GEOGRAPHY", "HUMAN HEALTH AND DISEASES", "INDIAN CULTURE",
+  "INDIAN ECONOMY", "INDIAN POLITY", "INDIAN SOCIETY", "INDUSTRIAL SECTOR",
+  "INFRASTRUCTURE IN INDIA", "INTERNAL SECURITY", "INTERNATIONAL RELATIONS",
+  "MEDIEVAL HISTORY", "MODERN HISTORY", "NANO TECHNOLOGIES IN INDIA",
+  "PHYSICAL GEOGRAPHY", "PHYSICAL GEOGRAPHY OF INDIA", "PHYSICS",
+  "POST INDEPENENCE CONSOLIDATION", "SOCIAL JUSTICE", "SPACE SECTOR", "WORLD HISTORY",
+];
+
+// DRAFT — replace with your canonical RPSC tag bank (rpsc_ras_complete_tags_v3.json divisions)
+export const RAS_TOPICS = [
+  "RAJASTHAN HISTORY", "RAJASTHAN ART AND CULTURE", "RAJASTHAN GEOGRAPHY",
+  "RAJASTHAN POLITY AND ADMINISTRATION", "RAJASTHAN ECONOMY", "RAJASTHAN CURRENT AFFAIRS",
+  "INDIAN HISTORY", "INDIAN POLITY", "INDIAN ECONOMY", "INDIAN GEOGRAPHY",
+  "WORLD GEOGRAPHY", "SCIENCE AND TECHNOLOGY", "ENVIRONMENT AND ECOLOGY",
+  "REASONING AND MENTAL ABILITY", "STATISTICS AND BASIC NUMERACY", "CURRENT AFFAIRS NATIONAL",
+];
+
+export const TOPICS_BY_EXAM = { IAS: IAS_TOPICS, RAS: RAS_TOPICS };
+
+export function getTopics(examType) {
+  return TOPICS_BY_EXAM[examType] || IAS_TOPICS;
+}
