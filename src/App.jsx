@@ -505,16 +505,28 @@ function FormatChips({ label }) {
 const primaryBtn = { background: C.maroon, color: C.cream, border: "none", borderRadius: 12, padding: "13px 24px", fontWeight: 600, fontSize: 15, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 6px 18px rgba(92,15,20,0.28)" };
 const outlineBtn = { background: C.paper, color: C.maroon, border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: "13px 24px", fontWeight: 600, fontSize: 15, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 };
 
+
+function useStickyState(defaultValue, key) {
+  const [value, setValue] = React.useState(() => {
+    const stickyValue = window.sessionStorage.getItem(key);
+    return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+  });
+  React.useEffect(() => {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue];
+}
+
 // ================= Main =================
 function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   const [examId, setExamId] = useState(initialExam);
   const [lang, setLang] = useState("en");
-  const [stage, setStage] = useState("mode");
+  const [stage, setStage] = useStickyState("mode", "vyas_stage");
   const [historyList, setHistoryList] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [mode, setMode] = useState(null);
-  const [paperId, setPaperId] = useState(null);
-  const [unitId, setUnitId] = useState(null);
+  const [mode, setMode] = useStickyState(null, "vyas_mode");
+  const [paperId, setPaperId] = useStickyState(null, "vyas_paperId");
+  const [unitId, setUnitId] = useStickyState(null, "vyas_unitId");
   const [numQ, setNumQ] = useState(1);
   const [qUp, setQUp] = useState(false);
   const [aUp, setAUp] = useState(false);
@@ -527,7 +539,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
 
   // Back button & Timing & Notifications
   const [evalStartTime, setEvalStartTime] = useState(null);
-  const [evalTimeTaken, setEvalTimeTaken] = useState(null);
+  const [evalTimeTaken, setEvalTimeTaken] = useStickyState(null, "vyas_evalTimeTaken");
 
   const changeStage = (newStage) => {
     setStage(newStage);
@@ -540,17 +552,20 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
       else setStage("mode");
     };
     window.addEventListener("popstate", handlePop);
-    window.history.replaceState({ stage: "mode" }, "", "?stage=mode");
+    const currStage = window.sessionStorage.getItem("vyas_stage") ? JSON.parse(window.sessionStorage.getItem("vyas_stage")) : "mode";
+    if (!window.history.state || !window.history.state.stage) {
+      window.history.replaceState({ stage: currStage }, "", `?stage=${currStage}`);
+    }
     return () => window.removeEventListener("popstate", handlePop);
   }, []);
 
 
   // ---- Real backend state ----
   const [jobId, setJobId] = useState(null);
-  const [apiResult, setApiResult] = useState(null);  // final payload from backend
+  const [apiResult, setApiResult] = useStickyState(null, "vyas_apiResult");  // final payload from backend
   const [apiError, setApiError] = useState(null);    // error string
   const [apiProgress, setApiProgress] = useState(null); // {percent, message}
-  const [pdfDownloadUrl, setPdfDownloadUrl] = useState(null); // real PDF URL
+  const [pdfDownloadUrl, setPdfDownloadUrl] = useStickyState(null, "vyas_pdfUrl"); // real PDF URL
   const ansFileRef = useRef(null);   // File object for answer copy
   const qpFileRef  = useRef(null);   // File object for question paper
   const pollRef = useRef(null);      // setInterval handle
