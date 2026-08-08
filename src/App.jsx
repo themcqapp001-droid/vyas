@@ -530,8 +530,8 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
   const [evalTimeTaken, setEvalTimeTaken] = useState(null);
 
   const changeStage = (newStage) => {
-    changeStage(newStage);
-    window.history.pushState({ stage: newStage }, "", ?stage=);
+    setStage(newStage);
+    window.history.pushState({ stage: newStage }, "", `?stage=${newStage}`);
   };
 
   useEffect(() => {
