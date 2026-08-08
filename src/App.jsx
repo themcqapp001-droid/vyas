@@ -617,7 +617,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
       try {
         const r = await fetch(`${API_BASE}/api/jobs/${jid}`);
         const job = await r.json();
-        if (job.percent !== undefined) setApiProgress({ percent: job.percent, message: job.message || "" });
+        if (job.percent !== undefined) setApiProgress({ percent: job.percent, message: job.message || "", queue_position: job.queue_position, eta_seconds: job.eta_seconds });
         if (job.status === "done") {
           clearInterval(pollRef.current);
           if (evalStartTime) setEvalTimeTaken(Math.round((Date.now() - evalStartTime) / 1000));
@@ -1238,9 +1238,17 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
               {mode === "custom" && numQ > 1 && <div style={{ color: C.gold, fontSize: 13, fontWeight: 600, marginTop: 6 }}>1 {t.ofN} {numQ}</div>}
             </div>
             <div style={{ maxWidth: 440, margin: "0 auto 6px", display: "flex", justifyContent: "space-between", fontSize: 12, color: C.inkSoft }}>
-              <span>{jobId ? evalMessage : t.evalSub}</span>
+              <span>
+                {jobId ? evalMessage : t.evalSub}
+                {apiProgress?.queue_position > 1 && ` (Queue: #${apiProgress.queue_position - 1})`}
+              </span>
               {jobId && <span>{evalPercent}%</span>}
             </div>
+            {apiProgress?.queue_position > 1 && (
+              <div style={{ maxWidth: 440, margin: "0 auto 10px", fontSize: 13, color: C.gold, fontWeight: 600, textAlign: "center" }}>
+                Estimated Wait Time: {Math.ceil(apiProgress.eta_seconds / 60)} min
+              </div>
+            )}
             <div style={{ maxWidth: 440, margin: "0 auto 20px", height: 6, borderRadius: 20, background: C.creamDeep, overflow: "hidden" }}>
               <div style={{ height: "100%",
                 width: jobId ? `${evalPercent}%` : `${(step / evalSteps.length) * 100}%`,
