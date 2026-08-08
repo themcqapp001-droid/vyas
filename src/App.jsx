@@ -742,20 +742,13 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     return () => clearTimeout(to);
   }, [stage, forceNoQ]); // eslint-disable-line
 
-  // Demo animation (only when no real job is running)
-  useEffect(() => {
-    if (stage !== "evaluating" || jobId) return;
-    if (step < evalSteps.length) { const to = setTimeout(() => setStep((s) => s + 1), 820); return () => clearTimeout(to); }
-    const to = setTimeout(() => changeStage("result"), 500); return () => clearTimeout(to);
-  }, [stage, step, jobId]); // eslint-disable-line
-
   // Sync step indicator with real API progress
   useEffect(() => {
-    if (!apiProgress || !jobId) return;
+    if (!apiProgress) return;
     const pct = apiProgress.percent || 0;
     const newStep = pct < 25 ? 0 : pct < 60 ? 1 : pct < 85 ? 2 : 3;
     setStep(newStep);
-  }, [apiProgress, jobId]); // eslint-disable-line
+  }, [apiProgress]); // eslint-disable-line
 
   // Use real results if available, else sample data
   const activeResult = apiResult || null;
