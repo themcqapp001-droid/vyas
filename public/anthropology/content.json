@@ -1,0 +1,46 @@
+{
+  "hero": {
+    "eyebrow": "Optional Subject · UPSC Civil Services",
+    "title": "Anthropology, excavated<br>layer by <em>layer</em>.",
+    "lead": "A mentorship-led preparation system for Anthropology optional — built around the way the subject actually works: fossils, fieldwork, and theory, stratified into a syllabus you can master in order."
+  },
+  "strata": [
+    { "depth": "300 KYA · SURFACE LAYER", "title": "Homo sapiens", "body": "Modern cognition, symbolic behaviour, global dispersal. The reference point for every comparison question Paper I asks.", "cc": "≈1350 cc", "size": 34 },
+    { "depth": "1.8 MYA", "title": "Homo erectus", "body": "First controlled use of fire, first hominin to leave Africa, Acheulian tool tradition — a favourite for archaeological-anthropology questions.", "cc": "≈1000 cc", "size": 28 },
+    { "depth": "2.4 MYA", "title": "Homo habilis", "body": "\"Handy man\" — the Oldowan toolkit and the formal beginning of the archaeological record examiners keep returning to.", "cc": "≈650 cc", "size": 22 },
+    { "depth": "3.9 MYA", "title": "Australopithecus afarensis", "body": "Bipedal, small-brained — \"Lucy\" is the single most-cited fossil in Paper I evolution answers.", "cc": "≈450 cc", "size": 17 },
+    { "depth": "7 MYA · BEDROCK", "title": "Sahelanthropus &amp; the hominin split", "body": "Where the primate lineage and the hominin lineage diverge — the opening argument of every primatology answer.", "cc": "≈350 cc", "size": 13 }
+  ],
+  "paper1": [
+    { "tag": "Unit — Primatology", "title": "Primates &amp; the Living Record", "items": ["Primate characteristics &amp; classification", "Comparative anatomy: Pongidae &amp; Hominidae", "Primate behaviour &amp; social organisation", "Living major primates &amp; their conservation status"] },
+    { "tag": "Unit — Physical Anthropology", "title": "Human Evolution &amp; Variation", "items": ["Biological &amp; cultural evolution theories", "Human genetics: Mendelian &amp; population genetics", "Race &amp; racism, human growth &amp; nutrition", "Fossil evidence: Australopithecines to Homo sapiens"] },
+    { "tag": "Unit — Archaeological Anthropology", "title": "Prehistory &amp; Material Culture", "items": ["Paleolithic, Mesolithic, Neolithic traditions", "Dating methods: relative &amp; absolute chronology", "Tool typology &amp; technology through the ages", "Origin of agriculture &amp; domestication"] },
+    { "tag": "Unit — Sociocultural Theory", "title": "Anthropological Thought", "items": ["Evolutionism, diffusionism, functionalism", "Structuralism &amp; post-structuralism", "Kinship, marriage &amp; family systems", "Economic &amp; political organisation"] }
+  ],
+  "paper2": [
+    { "label": "Entry 01 — Prehistoric &amp; Ethnic Foundations", "title": "The Peopling of India", "body": "Paleolithic to Neolithic cultures on the subcontinent, and the racial and linguistic classifications historically used to describe Indian populations.", "topics": ["Prehistoric cultures", "Racial elements", "Linguistic groups"] },
+    { "label": "Entry 02 — Social Structure", "title": "Caste, Tribe &amp; Village India", "body": "The structural and cultural dimensions of Indian society: varna and jati, tribe-caste continuum, and the village as a unit of study.", "topics": ["Caste system", "Tribe-caste continuum", "Village studies"] },
+    { "label": "Entry 03 — Tribal Situation", "title": "Scheduled Tribes &amp; Development", "body": "Classification of Indian tribes by region and economy, the impact of urbanisation and industrialisation, and constitutional safeguards.", "topics": ["PVTGs", "Displacement &amp; rehabilitation", "Forest rights"] },
+    { "label": "Entry 04 — Applied &amp; Contemporary", "title": "Anthropology in Policy", "body": "Applied anthropology in tribal welfare, health, and national development planning — where the paper meets current governance debates.", "topics": ["Tribal welfare schemes", "NGOs &amp; development", "Anthropology &amp; law"] },
+    { "label": "Entry 05 — Religion &amp; Belief Systems", "title": "Tribal &amp; Folk Religion", "body": "Religious pluralism in India, tribal belief systems, and the process of sanskritisation and religious syncretism.", "topics": ["Sanskritisation", "Tribal pantheon", "Syncretism"] }
+  ],
+  "phases": [
+    { "num": "01", "title": "Foundation Layer", "body": "Topic-wise tests on each unit of Paper I and Paper II, taken right after that unit is taught. Builds recall before it builds speed.", "meta": "16 SECTIONAL TESTS · 20 MARKS EACH" },
+    { "num": "02", "title": "Sedimentary Layer", "body": "Full-syllabus questions mixed across units, forcing you to connect theory with case material — exactly how UPSC frames real questions.", "meta": "10 MIXED TESTS · 100 MARKS EACH" },
+    { "num": "03", "title": "Compression Layer", "body": "Full-length, three-hour simulated Mains papers under exam conditions, with the same time pressure and question count as the real exam.", "meta": "10 FULL-LENGTH TESTS · 250 MARKS EACH" },
+    { "num": "04", "title": "Surface Layer", "body": "Final revision tests built entirely from your own past mistakes and weak topics, taken in the last six weeks before the exam.", "meta": "4 PERSONALISED TESTS · REVISION FOCUS" }
+  ],
+  "included": [
+    { "n": "01", "title": "Line-by-line evaluation", "body": "Margin notes on structure, content and missed keywords, not just a number." },
+    { "n": "02", "title": "Model answer booklet", "body": "A model answer for every question, written within the actual word/time limit." },
+    { "n": "03", "title": "Diagram bank", "body": "Ready-to-reproduce diagrams for evolution, kinship and settlement-pattern questions." },
+    { "n": "04", "title": "Rank-list benchmarking", "body": "See where your score falls against the batch after every full-length test." },
+    { "n": "05", "title": "One-on-one review call", "body": "A short call after every full-length test to walk through what to fix next." },
+    { "n": "06", "title": "Current affairs linkage", "body": "Monthly notes connecting tribal affairs and policy news back to Paper II topics." }
+  ],
+  "testimonials": [
+    { "quote": "The core-sample way of teaching evolution finally made the fossil sequence stick — I stopped mixing up habilis and erectus in the exam hall.", "who": "Anthropology Optional Aspirant, 2025" },
+    { "quote": "Weekly answer evaluation was the single biggest jump in my score between the first and third full-length test.", "who": "Anthropology Optional Aspirant, 2024" },
+    { "quote": "Having one mentor track my Paper II answers meant feedback actually built on itself, cycle after cycle.", "who": "Anthropology Optional Aspirant, 2024" }
+  ]
+}
