@@ -506,7 +506,7 @@ const primaryBtn = { background: C.maroon, color: C.cream, border: "none", borde
 const outlineBtn = { background: C.paper, color: C.maroon, border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: "13px 24px", fontWeight: 600, fontSize: 15, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 };
 
 // ================= Main =================
-export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
+function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   const [examId, setExamId] = useState(initialExam);
   const [lang, setLang] = useState("en");
   const [stage, setStage] = useState("mode");
@@ -743,7 +743,7 @@ export default function VyasUI({ examId: initialExam = "UPSC", token = "" }) {
 
   // Use real results if available, else sample data
   const activeResult = apiResult || null;
-  const activeQuestions = activeResult?.questions || [];
+  const activeQuestions = Array.isArray(activeResult?.questions) ? activeResult.questions : [];
   const avg = S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length;
   const awarded = Math.round((avg / 10) * marks * 10) / 10;
   const totalAwarded = activeResult
@@ -1371,5 +1371,13 @@ function UploadSlot({ index, label, done, uploadedLabel, tapLabel, inputId, onPi
       </button>
       <input id={inputId} type="file" accept={ACCEPT} hidden onChange={onChange} />
     </>
+  );
+}
+
+export default function VyasUI(props) {
+  return (
+    <ErrorBoundary>
+      <VyasUIInternal {...props} />
+    </ErrorBoundary>
   );
 }
