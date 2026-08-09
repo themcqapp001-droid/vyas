@@ -568,6 +568,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   // Back button & Timing & Notifications
   const [evalStartTime, setEvalStartTime] = useState(null);
   const [evalTimeTaken, setEvalTimeTaken] = useStickyState(null, "vyas_evalTimeTaken");
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   const changeStage = (newStage) => {
     setStage(newStage);
