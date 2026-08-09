@@ -1406,7 +1406,10 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                   {pdfUrl ? (
                     <button className="vyas-btn" onClick={(e) => {
                       e.preventDefault();
-                      fetch(pdfUrl).then(res => res.blob()).then(blob => {
+                      fetch(pdfUrl).then(res => {
+                        if (!res.ok) throw new Error("Network");
+                        return res.blob();
+                      }).then(blob => {
                         const url = window.URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
@@ -1415,7 +1418,9 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                         a.click();
                         a.remove();
                         window.URL.revokeObjectURL(url);
-                      }).catch(() => window.open(pdfUrl, '_blank'));
+                      }).catch(() => {
+                        window.open(pdfUrl, '_blank');
+                      });
                     }} style={{ ...outlineBtn, textDecoration: "none", padding: "14px 24px" }}>
                       <Download size={18} /> {t.downloadPdf}
                     </button>
@@ -1456,7 +1461,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                 </div>
 
                 {/* Macro comments */}
-                {activeResult && activeResult.overall_macro_comments && activeResult.overall_macro_comments.length > 0 && (
+                {activeResult && activeResult.overall_macro_comments && Array.isArray(activeResult.overall_macro_comments) && activeResult.overall_macro_comments.length > 0 && (
                   <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: "20px 22px", marginBottom: 24 }}>
                     <div style={{ fontFamily: ff.display, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>Overall Feedback</div>
                     {activeResult.overall_macro_comments.map((c, i) => (
@@ -1479,7 +1484,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                         <div style={{ fontFamily: ff.display, fontSize: 20, fontWeight: 700, color: borderCol }}>{parseFloat(q.awarded_marks || 0).toFixed(1)} / {q.max_marks}</div>
                       </div>
                       <div style={{ fontFamily: ff.body, fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.5 }}>{q.detected_question}</div>
-                      {q.grid && Object.entries(q.grid).map(([k, v]) => (
+                      {q.grid && typeof q.grid === 'object' && Object.entries(q.grid).map(([k, v]) => (
                         <div key={k} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
                           <span style={{ fontSize: 12, fontWeight: 600, color: C.inkSoft, minWidth: 160, textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</span>
                           <span style={{ fontSize: 12.5, color: C.ink }}>{v}</span>
