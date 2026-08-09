@@ -642,11 +642,16 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   // ---- Real backend submission ----
   const startPolling = (jid) => {
     if (pollRef.current) clearInterval(pollRef.current);
+    let errorCount = 0;
     pollRef.current = setInterval(async () => {
       try {
         const r = await fetch(`${API_BASE}/api/jobs/${jid}`, { headers: authHeader() });
         const job = await r.json();
-        if (!r.ok) throw new Error(job.detail || job.error || "Job not found");
+        if (!r.ok) {
+          if (r.status === 404 || r.status === 403) throw new Error(job.detail || job.error || "Job not found");
+          throw new Error("Temporary server error");
+        }
+        errorCount = 0; // Reset on success
         if (job.percent !== undefined) setApiProgress({ percent: job.percent, message: job.message || "", queue_position: job.queue_position, eta_seconds: job.eta_seconds });
         if (job.status === "done") {
           clearInterval(pollRef.current);
@@ -672,12 +677,24 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
           sessionStorage.removeItem("vyas_active_job");
         }
       } catch (e) {
+        if (!e.message.includes("Job not found") && !e.message.includes("Access denied")) {
+          errorCount++;
+          if (errorCount < 300) return; // Tolerate up to 300 consecutive network drops (10 mins) for mobile backgrounding
+        }
         clearInterval(pollRef.current);
         setApiError(e.message);
         changeStage("apiError");
         sessionStorage.removeItem("vyas_active_job");
       }
     }, 2000);
+  };
+
+  const resumeJob = (jid) => {
+    setJobId(jid);
+    sessionStorage.setItem("vyas_active_job", jid);
+    setShowHistory(false);
+    changeStage("evaluating");
+    startPolling(jid);
   };
 
   const submitToBackend = async (overrideCredits = false) => {
@@ -1020,7 +1037,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.inkSoft, letterSpacing: 0.6, marginBottom: 10 }}>IN PROGRESS</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {activeJobs.map(j => (
-                    <div key={j.job_id} style={{ padding: "14px 18px", border: `1.5px solid ${C.gold}66`, borderRadius: 12, background: "#FFFDF4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                    <div key={j.job_id} onClick={() => resumeJob(j.job_id)} className="vyas-btn" style={{ padding: "14px 18px", border: `1.5px solid ${C.gold}66`, borderRadius: 12, background: "#FFFDF4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left" }}>
                       <div>
                         <div style={{ fontWeight: 600, color: C.ink, fontSize: 14 }}>{j.meta?.exam || "UPSC"} {j.meta?.paper ? `— ${j.meta.paper}` : ""}</div>
                         <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 3 }}>{j.message || j.stage} · {j.percent}%{j.eta_seconds > 0 ? ` · ~${Math.ceil(j.eta_seconds / 60)} min left` : ""}</div>
