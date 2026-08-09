@@ -782,7 +782,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   const reset = () => {
     changeStage("mode"); setMode(null); setPaperId(null); setUnitId(null);
     setNumQ(1); setQUp(false); setAUp(false); setForceNoQ(false); setStep(0); setEditingCushion(false); setEvalType(null);
-    setJobId(null); setApiResult(null); setApiError(null); setApiProgress(null); setPdfDownloadUrl(null);
+    setJobId(null); setApiResult(null); setApiError(null); setApiProgress(null); setPdfDownloadUrl(null); setShowAnalysis(false);
     ansFileRef.current = null; qpFileRef.current = null;
     if (pollRef.current) clearInterval(pollRef.current);
     sessionStorage.removeItem("vyas_active_job");
@@ -1382,85 +1382,114 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
         {/* -------- RESULT -------- */}
         {stage === "result" && (
           <div className="fade-in">
-            {/* Score Header — real data when available, else demo */}
-            <div style={{ background: C.maroon, borderRadius: 20, padding: "28px 24px", display: "flex", gap: 26, alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
-              <Medallion value={totalAwarded} max={totalOutOf || marks} marksLabel={t.marksLabel} ff={ff} />
-              <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ fontFamily: ff.body, fontSize: 12, letterSpacing: 0.5, color: C.goldSoft, fontWeight: 600, marginBottom: 8 }}>{ctxLine}</div>
-                <div style={{ fontFamily: ff.display, fontSize: 22, fontWeight: 700, color: C.cream, lineHeight: 1.3, marginBottom: 8 }}>
-                  {activeResult ? `${totalAwarded.toFixed(1)} / ${totalOutOf} marks` : verdict(S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length, lang)}
+            {!showAnalysis ? (
+              <div style={{ textAlign: "center", paddingTop: 20 }}>
+                <div style={{ width: 80, height: 80, borderRadius: "50%", background: C.gold, display: "grid", placeItems: "center", margin: "0 auto 20px", boxShadow: "0 8px 24px rgba(201,162,39,0.3)" }}>
+                  <Check size={40} color={C.maroon} strokeWidth={3} />
                 </div>
-                {activeResult && activeResult.booklet_verdict && (
-                  <div style={{ fontFamily: ff.body, fontSize: 13.5, color: C.goldSoft }}>{activeResult.booklet_verdict}</div>
-                )}
-                {!activeResult && <div style={{ fontFamily: ff.body, fontSize: 13.5, color: C.goldSoft }}>{S.note.label} <b style={{ color: C.cream }}>{S.note.value}</b> {S.note.explain}</div>}
-              </div>
-            </div>
-
-            {/* Per-question results when real data exists */}
-            {activeResult && activeQuestions.length > 0 && activeQuestions.map((q, qi) => (
-              <div key={qi} style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: "20px 22px", marginBottom: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontFamily: ff.display, fontSize: 17, fontWeight: 700, color: C.maroon }}>Q{q.q_no}</div>
-                  <div style={{ fontFamily: ff.display, fontSize: 20, fontWeight: 700, color: C.gold }}>{parseFloat(q.awarded_marks || 0).toFixed(1)} / {q.max_marks}</div>
-                </div>
-                <div style={{ fontFamily: ff.body, fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.5 }}>{q.detected_question}</div>
-                {q.grid && Object.entries(q.grid).map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: C.inkSoft, minWidth: 160, textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</span>
-                    <span style={{ fontSize: 12.5, color: C.ink }}>{v}</span>
+                <h1 style={{ fontFamily: ff.display, fontSize: 28, fontWeight: 700, color: C.maroon, margin: "0 0 12px" }}>
+                  Your copy checked successfully!
+                </h1>
+                
+                <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 20, padding: "30px", margin: "24px auto", maxWidth: 320, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <Medallion value={totalAwarded} max={totalOutOf || marks} marksLabel={t.marksLabel} ff={ff} />
+                  <div style={{ fontFamily: ff.display, fontSize: 26, fontWeight: 700, color: C.maroon, marginTop: 16 }}>
+                    {activeResult ? `${totalAwarded.toFixed(1)} / ${totalOutOf}` : verdict(S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length, lang)}
                   </div>
-                ))}
-                {q.annotations && q.annotations.length > 0 && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: C.inkSoft }}>{q.annotations.length} annotation{q.annotations.length !== 1 ? "s" : ""} on copy</div>
-                )}
-              </div>
-            ))}
+                  <div style={{ fontSize: 14, color: C.inkSoft, fontWeight: 600, marginTop: 4 }}>Total Score</div>
+                </div>
 
-            {/* Demo scorecard when no real data */}
-            {!activeResult && (
-              <>
-                <SectionTitle icon={PenLine} text={t.scorecard} ff={ff} />
-                <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: "22px 22px 8px", marginBottom: 24 }}>
-                  {S.dimensions.map((d, i) => <DimBar key={i} dim={d} delay={200 + i * 110} ff={ff} />)}
+                <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 24 }}>
+                  <button className="vyas-btn" onClick={() => setShowAnalysis(true)} style={{ ...primaryBtn, padding: "14px 24px" }}>
+                    <Sparkles size={18} /> View Detailed Analysis
+                  </button>
+                  {pdfUrl ? (
+                    <button className="vyas-btn" onClick={(e) => {
+                      e.preventDefault();
+                      fetch(pdfUrl).then(res => res.blob()).then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Vyas_Evaluated_${jobId || 'copy'}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        window.URL.revokeObjectURL(url);
+                      }).catch(() => window.open(pdfUrl, '_blank'));
+                    }} style={{ ...outlineBtn, textDecoration: "none", padding: "14px 24px" }}>
+                      <Download size={18} /> {t.downloadPdf}
+                    </button>
+                  ) : (
+                    <button className="vyas-btn" style={{ ...outlineBtn, opacity: 0.5, cursor: "not-allowed", padding: "14px 24px" }}>
+                      <Download size={18} /> {t.downloadPdf}
+                    </button>
+                  )}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 24 }}>
-                  <FeedbackCard title={t.didWell} items={S.strengths} accent={C.gold} tone="good" ff={ff} />
-                  <FeedbackCard title={t.gainMarks} items={S.gains} accent={C.maroon} tone="improve" ff={ff} />
+                <div style={{ marginTop: 24 }}>
+                  <button className="vyas-btn" onClick={reset} style={{ background: "transparent", color: C.inkSoft, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                    <RotateCcw size={16} style={{ verticalAlign: "middle", marginRight: 6 }} /> Evaluate Another Copy
+                  </button>
                 </div>
-                <SectionTitle icon={FileText} text={t.onCopy} ff={ff} />
-                <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: 8, marginBottom: 28 }}>
-                  {S.annotated.map((a, i) => (
-                    <div key={i} style={{ display: "flex", flexWrap: "wrap", borderBottom: i < S.annotated.length - 1 ? `1px solid ${C.creamDeep}` : "none" }}>
-                      <div style={{ flex: "1 1 260px", padding: 16, fontFamily: ff.body, fontSize: 14.5, color: C.ink, lineHeight: 1.6, borderLeft: `3px solid ${a.tone === "good" ? C.gold : C.maroon}` }}>{a.text}</div>
-                      <div style={{ flex: "1 1 180px", padding: 16, background: a.tone === "good" ? "#FBF7EA" : "#FCEFE9", fontFamily: ff.body, fontSize: 12.5, color: a.tone === "good" ? "#7A6410" : C.maroon, fontStyle: "italic", display: "flex", alignItems: "center" }}>{a.note}</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", marginBottom: 24, gap: 12 }}>
+                  <button onClick={() => setShowAnalysis(false)} style={{ background: C.cream, border: "none", width: 40, height: 40, borderRadius: "50%", display: "grid", placeItems: "center", cursor: "pointer", color: C.maroon }}>
+                    <ArrowRight size={20} style={{ transform: "rotate(180deg)" }} />
+                  </button>
+                  <h2 style={{ fontFamily: ff.display, fontSize: 22, fontWeight: 700, color: C.maroon, margin: 0 }}>Detailed Analysis</h2>
+                </div>
+
+                {/* Score Header */}
+                <div style={{ background: C.maroon, borderRadius: 20, padding: "28px 24px", display: "flex", gap: 26, alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
+                  <Medallion value={totalAwarded} max={totalOutOf || marks} marksLabel={t.marksLabel} ff={ff} />
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <div style={{ fontFamily: ff.body, fontSize: 12, letterSpacing: 0.5, color: C.goldSoft, fontWeight: 600, marginBottom: 8 }}>{ctxLine}</div>
+                    <div style={{ fontFamily: ff.display, fontSize: 22, fontWeight: 700, color: C.cream, lineHeight: 1.3, marginBottom: 8 }}>
+                      {activeResult ? `${totalAwarded.toFixed(1)} / ${totalOutOf} marks` : verdict(S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length, lang)}
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* Macro comments from real evaluation */}
-            {activeResult && activeResult.overall_macro_comments && activeResult.overall_macro_comments.length > 0 && (
-              <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: "20px 22px", marginBottom: 24 }}>
-                <div style={{ fontFamily: ff.display, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>Overall Feedback</div>
-                {activeResult.overall_macro_comments.map((c, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: C.creamDeep, display: "grid", placeItems: "center", flexShrink: 0 }}><Sparkles size={12} color={C.maroon} /></div>
-                    <span style={{ fontFamily: ff.body, fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{c}</span>
+                    {activeResult && activeResult.booklet_verdict && (
+                      <div style={{ fontFamily: ff.body, fontSize: 13.5, color: C.goldSoft }}>{activeResult.booklet_verdict}</div>
+                    )}
+                    {!activeResult && <div style={{ fontFamily: ff.body, fontSize: 13.5, color: C.goldSoft }}>{S.note.label} <b style={{ color: C.cream }}>{S.note.value}</b> {S.note.explain}</div>}
                   </div>
-                ))}
+                </div>
+
+                {/* Macro comments */}
+                {activeResult && activeResult.overall_macro_comments && activeResult.overall_macro_comments.length > 0 && (
+                  <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: "20px 22px", marginBottom: 24 }}>
+                    <div style={{ fontFamily: ff.display, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>Overall Feedback</div>
+                    {activeResult.overall_macro_comments.map((c, i) => (
+                      <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                        <div style={{ width: 20, height: 20, borderRadius: "50%", background: C.creamDeep, display: "grid", placeItems: "center", flexShrink: 0 }}><Sparkles size={12} color={C.maroon} /></div>
+                        <span style={{ fontFamily: ff.body, fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Per-question results */}
+                {activeResult && activeQuestions.length > 0 && activeQuestions.map((q, qi) => {
+                  const scorePercent = (parseFloat(q.awarded_marks || 0) / (parseFloat(q.max_marks) || 1)) * 100;
+                  const borderCol = scorePercent >= 60 ? "#4CAF50" : scorePercent <= 40 ? "#F44336" : C.gold;
+                  return (
+                    <div key={qi} style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderLeft: `5px solid ${borderCol}`, borderRadius: 16, padding: "20px 22px", marginBottom: 18 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                        <div style={{ fontFamily: ff.display, fontSize: 17, fontWeight: 700, color: C.maroon }}>Q{q.q_no}</div>
+                        <div style={{ fontFamily: ff.display, fontSize: 20, fontWeight: 700, color: borderCol }}>{parseFloat(q.awarded_marks || 0).toFixed(1)} / {q.max_marks}</div>
+                      </div>
+                      <div style={{ fontFamily: ff.body, fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.5 }}>{q.detected_question}</div>
+                      {q.grid && Object.entries(q.grid).map(([k, v]) => (
+                        <div key={k} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: C.inkSoft, minWidth: 160, textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</span>
+                          <span style={{ fontSize: 12.5, color: C.ink }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
-
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="vyas-btn" onClick={reset} style={{ ...primaryBtn, boxShadow: "none" }}><RotateCcw size={17} /> {t.evalAnother}</button>
-              {pdfUrl ? (
-                <a href={pdfUrl} download className="vyas-btn" style={{ ...outlineBtn, textDecoration: "none" }}><Download size={17} /> {t.downloadPdf}</a>
-              ) : (
-                <button className="vyas-btn" style={{ ...outlineBtn, opacity: 0.5, cursor: "not-allowed" }}><Download size={17} /> {t.downloadPdf}</button>
-              )}
-            </div>
           </div>
         )}
               </ErrorBoundary>
