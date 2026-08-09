@@ -690,6 +690,10 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
         setApiProgress(null);
         return;
       }
+      
+      // We only change the stage to evaluating AFTER we confirm they have credits.
+      changeStage("evaluating");
+
       // Refresh Firebase token before each submit
       if (fbUser) {
         const freshTok = await idToken();
@@ -748,7 +752,6 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     }
     // If real files are attached, call the backend; otherwise alert the user
     if (ansFileRef.current) {
-      changeStage("evaluating");
       submitToBackend();
     } else {
       alert("No answer copy found! Please go back and re-upload your file.");
