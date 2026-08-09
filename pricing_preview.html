@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>VYAS Pricing preview</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Poppins:wght@400;600;700&display=swap');
+body{margin:0;background:#FBF3E6;font-family:'Poppins',sans-serif}</style></head>
+<body><div id="r"></div><script type="text/babel">
+const C={maroon:"#5C0F14",gold:"#C9A227",goldSoft:"#E0C766",cream:"#FBF3E6",ink:"#3A2A22",inkSoft:"#6B5A4E"};
+const packs=[{id:"silver",name:"Silver",checks:5,price_inr:199},{id:"gold",name:"Gold",checks:10,price_inr:349},{id:"platinum",name:"Platinum",checks:20,price_inr:599}];
+const TIER={silver:{accent:"#8A9099",ring:"#C9CDD3",tag:"",bg:"#fff"},gold:{accent:C.gold,ring:C.goldSoft,tag:"MOST POPULAR",bg:"#FFFDF4"},platinum:{accent:C.maroon,ring:"#7A1B22",tag:"BEST VALUE",bg:"#2A0A0D",dark:true}};
+const F={silver:["Full 100-point rubric + grid","Red-ink annotated PDF","Topper-answer benchmarking"],gold:["Everything in Silver","Best for weekly practice","Priority processing"],platinum:["Everything in Gold","Best value per copy","Fastest turnaround"]};
+function App(){return(<div style={{maxWidth:960,margin:"0 auto",padding:"40px 20px"}}>
+<div style={{textAlign:"center",marginBottom:26}}><div style={{fontFamily:"'Cinzel',serif",fontSize:30,fontWeight:700,color:C.maroon}}>Choose your pack</div>
+<div style={{color:C.inkSoft,marginTop:6}}>Pay once, evaluate that many answer copies. No subscription.</div></div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:20,alignItems:"stretch"}}>
+{packs.map(p=>{const t=TIER[p.id],per=Math.round(p.price_inr/p.checks),pop=p.id==="gold",dark=t.dark;return(
+<div key={p.id} style={{position:"relative",background:t.bg,border:`2px solid ${t.ring}`,borderRadius:20,padding:"26px 22px",display:"flex",flexDirection:"column",boxShadow:pop?"0 18px 44px rgba(201,162,39,0.30)":"0 8px 24px rgba(92,15,20,0.10)",transform:pop?"translateY(-8px)":"none",color:dark?C.cream:C.ink}}>
+{t.tag&&<div style={{position:"absolute",top:-13,left:"50%",transform:"translateX(-50%)",background:t.accent,color:p.id==="platinum"?C.cream:C.maroon,fontWeight:700,fontSize:11,letterSpacing:1,padding:"5px 14px",borderRadius:20}}>{t.tag}</div>}
+<div style={{fontFamily:"'Cinzel',serif",fontSize:22,fontWeight:700,color:dark?C.goldSoft:t.accent}}>{p.name}</div>
+<div style={{marginTop:12,display:"flex",alignItems:"baseline",gap:6}}><span style={{fontFamily:"'Cinzel',serif",fontSize:40,fontWeight:700}}>₹{p.price_inr}</span><span style={{fontSize:14,color:dark?C.goldSoft:C.inkSoft}}>one-time</span></div>
+<div style={{fontSize:15,fontWeight:600,marginTop:4}}>{p.checks} answer copies</div>
+<div style={{fontSize:12.5,color:dark?C.goldSoft:C.inkSoft,marginBottom:16}}>just ₹{per} per copy</div>
+<div style={{flex:1}}>{F[p.id].map((f,i)=>(<div key={i} style={{display:"flex",gap:9,marginBottom:10,fontSize:13.5}}><span style={{width:18,height:18,borderRadius:"50%",background:t.accent,color:dark?C.cream:C.maroon,display:"grid",placeItems:"center",flexShrink:0,fontSize:12,fontWeight:800}}>✓</span><span style={{color:dark?"#F0E6D2":C.ink}}>{f}</span></div>))}</div>
+<button style={{marginTop:18,width:"100%",padding:"13px",borderRadius:12,border:"none",cursor:"pointer",fontWeight:700,fontSize:15,background:dark?C.gold:t.accent,color:dark?C.maroon:(p.id==="silver"?"#fff":C.maroon)}}>Buy {p.name}</button>
+</div>);})}</div></div>);}
+ReactDOM.createRoot(document.getElementById("r")).render(<App/>);
+</script></body></html>
