@@ -597,6 +597,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   const ansFileRef = useRef(null);   // File object for answer copy
   const qpFileRef  = useRef(null);   // File object for question paper
   const pollRef = useRef(null);      // setInterval handle
+  const pendingSubmitRef = useRef(false); // To auto-resume evaluation after payment
 
   const cfg = EXAM_CONFIG[examId];
   const t = T[lang];
@@ -679,18 +680,20 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     }, 2000);
   };
 
-  const submitToBackend = async () => {
+  const submitToBackend = async (overrideCredits = false) => {
     setApiError(null);
     setApiResult(null);
     setApiProgress({ percent: 0, message: "Uploading…" });
     try {
       // ---- Credits gate ----
-      if (fbUser && credits < 1) {
+      if (fbUser && credits < 1 && !overrideCredits) {
+        pendingSubmitRef.current = true;
         setShowPricing(true);
         setApiProgress(null);
         return;
       }
       
+      pendingSubmitRef.current = false;
       // We only change the stage to evaluating AFTER we confirm they have credits.
       changeStage("evaluating");
 
@@ -822,7 +825,17 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   // ---- Render gates (login / pricing) ----
   if (!authReady) return <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", background:"#FBF3E6", fontFamily:"'Poppins',sans-serif", color:"#5C0F14", fontSize:18 }}>Loading…</div>;
   if (!fbUser) return <Login />;
-  if (showPricing) return <Pricing user={fbUser} onCredited={(c)=>{ setCredits(c); setShowPricing(false); }} onClose={()=>setShowPricing(false)} />;
+  if (showPricing) return <Pricing user={fbUser} onCredited={(c)=>{ 
+    setCredits(c); 
+    setShowPricing(false); 
+    if (pendingSubmitRef.current) {
+      pendingSubmitRef.current = false;
+      submitToBackend(true);
+    }
+  }} onClose={()=>{
+    pendingSubmitRef.current = false;
+    setShowPricing(false);
+  }} />;
 
   return (
     <div style={{ minHeight: "100vh", background: C.cream, fontFamily: ff.body, color: C.ink, position: "relative", overflow: "hidden" }}>
