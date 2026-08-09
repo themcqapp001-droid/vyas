@@ -1405,24 +1405,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                     <Sparkles size={18} /> View Detailed Analysis
                   </button>
                   {pdfUrl ? (
-                    <button className="vyas-btn" onClick={(e) => {
-                      e.preventDefault();
-                      fetch(pdfUrl).then(res => {
-                        if (!res.ok) throw new Error("Network");
-                        return res.blob();
-                      }).then(blob => {
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `Vyas_Evaluated_${jobId || 'copy'}.pdf`;
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
-                        window.URL.revokeObjectURL(url);
-                      }).catch(() => {
-                        window.open(pdfUrl, '_blank');
-                      });
-                    }} style={{ ...outlineBtn, textDecoration: "none", padding: "14px 24px" }}>
+                    <button className="vyas-btn" onClick={() => window.open(pdfUrl, '_blank')} style={{ ...outlineBtn, textDecoration: "none", padding: "14px 24px" }}>
                       <Download size={18} /> {t.downloadPdf}
                     </button>
                   ) : (
