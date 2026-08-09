@@ -644,7 +644,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/jobs/${jid}`);
+        const r = await fetch(`${API_BASE}/api/jobs/${jid}`, { headers: authHeader() });
         const job = await r.json();
         if (!r.ok) throw new Error(job.detail || job.error || "Job not found");
         if (job.percent !== undefined) setApiProgress({ percent: job.percent, message: job.message || "", queue_position: job.queue_position, eta_seconds: job.eta_seconds });
