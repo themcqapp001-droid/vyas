@@ -645,19 +645,32 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     if (pollRef.current) clearInterval(pollRef.current);
     let errorCount = 0;
     pollRef.current = setInterval(async () => {
+      // NOTE: this used to decide "give up now" vs "keep trying" by
+      // matching e.message against hard-coded English strings like
+      // "Job not found" / "Access denied". That's fragile — if the
+      // backend's wording ever changes (it did: it actually sends
+      // "Unknown job."), the check silently stops doing what it says.
+      // We now decide from the HTTP status code instead, which can't
+      // drift out of sync with the backend.
+      let httpStatus = null;
       try {
         const r = await fetch(`${API_BASE}/api/jobs/${jid}`, { headers: authHeader() });
-        const job = await r.json();
-        if (!r.ok) {
-          if (r.status === 404 || r.status === 403) throw new Error(job.detail || job.error || "Job not found");
-          throw new Error("Temporary server error");
+        httpStatus = r.status;
+        if (r.status === 404 || r.status === 403) {
+          // The job genuinely doesn't exist for this user (or was swept
+          // after 6h TTL). No amount of retrying fixes that — fail fast.
+          let job = {};
+          try { job = await r.json(); } catch (e) {}
+          throw new Error(job.detail || job.error || (r.status === 404 ? "Job not found" : "Access denied"));
         }
-        errorCount = 0; // Reset on success
+        if (!r.ok) throw new Error("Temporary server error");
+        const job = await r.json();
+        errorCount = 0; // Reset on any successful, non-404/403 response
         if (job.percent !== undefined) setApiProgress({ percent: job.percent, message: job.message || "", queue_position: job.queue_position, eta_seconds: job.eta_seconds });
         if (job.status === "done") {
           clearInterval(pollRef.current);
           if (evalStartTime) setEvalTimeTaken(Math.round((Date.now() - evalStartTime) / 1000));
-          
+
           if (Notification.permission === "granted") {
             new Notification("Evaluation Complete!", { body: "Your Vyas Mains evaluation is ready." });
           }
@@ -678,10 +691,19 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
           sessionStorage.removeItem("vyas_active_job");
         }
       } catch (e) {
-        if (!e.message.includes("Job not found") && !e.message.includes("Access denied")) {
-          errorCount++;
-          if (errorCount < 300) return; // Tolerate up to 300 consecutive network drops (10 mins) for mobile backgrounding
+        if (httpStatus === 404 || httpStatus === 403) {
+          // Real "this job is not yours / doesn't exist" — no point retrying.
+          clearInterval(pollRef.current);
+          setApiError(e.message);
+          changeStage("apiError");
+          sessionStorage.removeItem("vyas_active_job");
+          return;
         }
+        // Anything else (network drop, phone backgrounded, DNS hiccup,
+        // temporary 5xx) — tolerate up to 300 consecutive failures
+        // (~10 minutes at 2s/poll) before giving up.
+        errorCount++;
+        if (errorCount < 300) return;
         clearInterval(pollRef.current);
         setApiError(e.message);
         changeStage("apiError");
