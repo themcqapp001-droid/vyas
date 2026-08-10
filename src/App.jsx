@@ -62,6 +62,7 @@ const EXAM_CONFIG = {
     name: { en: "UPSC Civil Services · Mains", hi: "UPSC सिविल सेवा · मुख्य" },
     portal: { en: "UPSC Portal", hi: "UPSC पोर्टल" },
     papers: [
+      { id: "auto", label: { en: "Auto-detect Subject", hi: "विषय स्वतः पहचानें" }, rubric: "gs", fullMarks: 250, units: GS_UPSC },
       { id: "essay", label: { en: "Essay", hi: "निबंध" }, rubric: "essay", fullMarks: 250,
         units: [{ id: "e125", label: { en: "Essay · 125 marks", hi: "निबंध · 125 अंक" }, marks: 125, words: 1100, rubric: "essay" }] },
       { id: "gs1", label: { en: "GS-I · History · Geography · Society", hi: "GS-I · इतिहास · भूगोल · समाज" }, rubric: "gs", fullMarks: 250, units: GS_UPSC },
@@ -80,6 +81,7 @@ const EXAM_CONFIG = {
     name: { en: "RPSC RAS · Mains", hi: "RPSC RAS · मुख्य" },
     portal: { en: "RAS Portal", hi: "RAS पोर्टल" },
     papers: [
+      { id: "auto", label: { en: "Auto-detect Subject", hi: "विषय स्वतः पहचानें" }, rubric: "gs", fullMarks: 200, units: GS_RAS },
       { id: "gs1", label: { en: "GS Paper I", hi: "GS प्रश्नपत्र I" }, rubric: "gs", fullMarks: 200, units: GS_RAS },
       { id: "gs2", label: { en: "GS Paper II", hi: "GS प्रश्नपत्र II" }, rubric: "gs", fullMarks: 200, units: GS_RAS },
       { id: "gs3", label: { en: "GS Paper III", hi: "GS प्रश्नपत्र III" }, rubric: "gs", fullMarks: 200, units: GS_RAS },
@@ -100,11 +102,13 @@ const EXAM_CONFIG = {
 // Subjects present there: GS, Geography, Sociology, Anthropology, PSIR,
 // History, Ethics. Keep these strings exactly as spelled in the qbank.
 const SUBJECT_BY_PAPER = {
+  "UPSC:auto": "Auto",
   "UPSC:gs4": "Ethics",
   "UPSC:gs1": "GS",
   "UPSC:gs2": "GS",
   "UPSC:gs3": "GS",
   "UPSC:essay": "GS",
+  "RAS:auto": "Auto",
   "RAS:gs1": "GS",
   "RAS:gs2": "GS",
   "RAS:gs3": "GS",
