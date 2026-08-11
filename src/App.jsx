@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Upload, FileText, PenLine, Sparkles, Check, ArrowRight, RotateCcw,
+  Upload, FileText, PenLine, Sparkles, Check, ArrowRight, RotateCcw, X,
   Download, BookOpen, Feather, Layers, AlertTriangle, Search, Minus, Plus, UserCheck,
 } from "lucide-react";
 import { watchAuth, idToken, logout } from "./firebase";
@@ -1066,11 +1066,17 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                     <div key={j.job_id} onClick={() => resumeJob(j.job_id)} className="vyas-btn" style={{ padding: "14px 18px", border: `1.5px solid ${C.gold}66`, borderRadius: 12, background: "#FFFDF4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left" }}>
                       <div>
                         <div style={{ fontWeight: 600, color: C.ink, fontSize: 14 }}>{j.meta?.exam || "UPSC"} {j.meta?.paper ? `— ${j.meta.paper}` : ""}</div>
-                        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 3 }}>{j.message || j.stage} · {j.percent}%{j.eta_seconds > 0 ? ` · ~${Math.ceil(j.eta_seconds / 60)} min left` : ""}</div>
+                        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 3 }}>{j.message || j.stage} · {j.percent}%{j.eta_seconds > 0 && j.status !== "cancelled" && j.status !== "error" ? ` · ~${Math.ceil(j.eta_seconds / 60)} min left` : ""}</div>
                       </div>
-                      <div style={{ width: 120, height: 6, background: "#E7D9BE", borderRadius: 4, overflow: "hidden" }}>
-                        <div style={{ width: `${j.percent}%`, height: "100%", background: C.gold, borderRadius: 4, transition: "width .5s ease" }} />
-                      </div>
+                      {j.status === "cancelled" || j.status === "error" ? (
+                        <div style={{ width: 120, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+                          <X color="#dc3545" size={24} strokeWidth={3} />
+                        </div>
+                      ) : (
+                        <div style={{ width: 120, height: 6, background: "#E7D9BE", borderRadius: 4, overflow: "hidden" }}>
+                          <div style={{ width: `${j.percent}%`, height: "100%", background: C.gold, borderRadius: 4, transition: "width .5s ease" }} />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
