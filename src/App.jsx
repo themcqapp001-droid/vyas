@@ -805,6 +805,19 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     }
   };
   const sendToMentor = () => { setEvalType("mentor"); changeStage("mentorSent"); };
+  const cancelJob = async () => {
+    if (jobId) {
+      try {
+        await fetch(`${API_BASE}/api/jobs/${jobId}/abort`, {
+          method: "POST",
+          headers: authHeader()
+        });
+      } catch (e) {
+        console.error("Failed to abort job", e);
+      }
+    }
+    reset();
+  };
   const reset = () => {
     changeStage("mode"); setMode(null); setPaperId(null); setUnitId(null);
     setNumQ(1); setQUp(false); setAUp(false); setForceNoQ(false); setStep(0); setEditingCushion(false); setEvalType(null);
@@ -1352,7 +1365,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
               })}
             </div>
             <div style={{ marginTop: 32, textAlign: "center" }}>
-              <button className="vyas-btn" onClick={reset} style={{ background: "transparent", color: C.inkSoft, border: `1px solid ${C.creamDeep}`, padding: "10px 20px", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <button className="vyas-btn" onClick={cancelJob} style={{ background: "transparent", color: C.inkSoft, border: `1px solid ${C.creamDeep}`, padding: "10px 20px", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
                 <RotateCcw size={15} /> Cancel Evaluation
               </button>
             </div>
