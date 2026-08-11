@@ -638,8 +638,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     setUnitId(p.units[0].id);
   };
   const proceedFromQuestion = () => {
-    if (rubric === "language") { changeStage("evalChoice"); }
-    else { setCushionText(S.cushion); setEditingCushion(false); changeStage("cushion"); }
+    changeStage("evalChoice");
   };
   const scanForQuestion = (noQ) => { setAUp(true); setForceNoQ(noQ); changeStage("scanning"); };
   const confirmCushion = () => changeStage("evalChoice");
@@ -827,7 +826,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     }
   }, []); // eslint-disable-line
 
-  useEffect(() => { if (stage === "cushion" && !editingCushion) setCushionText(S.cushion); }, [stage, lang]); // eslint-disable-line
+  useEffect(() => { if (stage === "result") { window.scrollTo(0, 0); } }, [stage]);
 
   useEffect(() => {
     if (stage !== "scanning") return;
@@ -1250,46 +1249,6 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
           </div>
         )}
 
-        {/* -------- CUSHION -------- */}
-        {stage === "cushion" && (
-          <div className="fade-in" style={{ paddingTop: 4 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.creamDeep, color: C.maroon, padding: "6px 14px", borderRadius: 30, fontSize: 12, fontWeight: 600, letterSpacing: 1, marginBottom: 16 }}>{t.quickCheck}</div>
-            <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 12, padding: "12px 16px", marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: C.gold, letterSpacing: 0.5, marginBottom: 5 }}>
-                {mode === "custom" ? t.foundQ : t.questionLabel} · {marks} {t.marksLabel}{words ? ` · ${words} ${t.wordsLabel}` : ""}
-              </div>
-              <div style={{ fontFamily: ff.body, fontSize: 14.5, color: C.ink, fontWeight: 500 }}>{S.question}</div>
-            </div>
-            <h1 style={{ fontFamily: ff.display, fontSize: 25, fontWeight: 700, color: C.maroon, margin: "0 0 8px" }}>{t.cushionTitle}</h1>
-            <p style={{ color: C.inkSoft, fontSize: 15, margin: "0 0 20px", maxWidth: 580, lineHeight: 1.55 }}>{t.cushionDesc}</p>
-            <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderLeft: `4px solid ${C.gold}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.gold, letterSpacing: 1, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><BookOpen size={14} /> {t.detectedCushion}</div>
-              {editingCushion ? (
-                <textarea value={cushionText} onChange={(e) => setCushionText(e.target.value)} rows={4} aria-label="Edit cushion"
-                  style={{ width: "100%", fontFamily: ff.body, fontSize: 15, color: C.ink, lineHeight: 1.6, border: `1.5px solid ${C.gold}`, borderRadius: 10, padding: "12px 14px", resize: "vertical", background: C.cream, outline: "none" }} />
-              ) : (
-                <p style={{ fontFamily: ff.body, fontSize: 15.5, color: C.ink, lineHeight: 1.65, margin: 0, fontStyle: "italic" }}>&ldquo;{cushionText}&rdquo;</p>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {editingCushion ? (
-                <>
-                  <button className="vyas-btn" onClick={() => setEditingCushion(false)} style={primaryBtn}><Check size={17} /> {t.saveContinue}</button>
-                  <button className="vyas-btn" onClick={() => { setCushionText(S.cushion); setEditingCushion(false); }} style={outlineBtn}>{t.resetOriginal}</button>
-                </>
-              ) : (
-                <>
-                  <button className="vyas-btn" onClick={confirmCushion} style={primaryBtn}>{t.cushionYes} <ArrowRight size={17} /></button>
-                  <button className="vyas-btn" onClick={() => setEditingCushion(true)} style={outlineBtn}><PenLine size={16} /> {t.cushionEdit}</button>
-                </>
-              )}
-            </div>
-            <div style={{ marginTop: 22, fontSize: 13, color: C.inkSoft, display: "flex", gap: 10, alignItems: "flex-start", maxWidth: 560 }}>
-              <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: C.gold, color: C.maroon, fontWeight: 700, fontSize: 12, display: "grid", placeItems: "center", marginTop: 1 }}>i</span>
-              {t.whyStep}
-            </div>
-          </div>
-        )}
 
         {/* -------- EVALUATION CHOICE -------- */}
         {stage === "evalChoice" && (
