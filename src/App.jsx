@@ -7,6 +7,8 @@ import { watchAuth, idToken, logout } from "./firebase";
 import { api, setToken, authHeader } from "./lib/api";
 import Pricing from "./Pricing";
 import Login from "./Login";
+import ResultView from "./ResultView";
+import History from "./History";
 
 
 class ErrorBoundary extends React.Component {
@@ -516,11 +518,25 @@ const outlineBtn = { background: C.paper, color: C.maroon, border: `1.5px solid 
 
 function useStickyState(defaultValue, key) {
   const [value, setValue] = React.useState(() => {
-    const stickyValue = window.sessionStorage.getItem(key);
-    return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+    try {
+      const stickyValue = window.sessionStorage.getItem(key);
+      return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+    } catch (e) {
+      // Corrupt entry from an older build must not white-screen the app.
+      try { window.sessionStorage.removeItem(key); } catch (_) {}
+      return defaultValue;
+    }
   });
   React.useEffect(() => {
-    window.sessionStorage.setItem(key, JSON.stringify(value));
+    try {
+      window.sessionStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      // A 20-question payload with every annotation blows past the ~5MB
+      // sessionStorage quota. The old code let that throw inside an effect,
+      // which took the whole result screen down. Losing the cached copy is
+      // fine — the job endpoint still has it.
+      try { window.sessionStorage.removeItem(key); } catch (_) {}
+    }
   }, [key, value]);
   return [value, setValue];
 }
@@ -683,7 +699,9 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
             changeStage("apiError");
           } else {
             setApiResult(job.result);
-            if (job.pdf_url) setPdfDownloadUrl(`${API_BASE}${job.pdf_url}`);
+            // Store the raw path. openResult() asks the backend for a signed
+            // link at click time, because a new tab cannot send an auth header.
+            if (job.pdf_url) setPdfDownloadUrl(job.pdf_url);
             changeStage("result");
           }
           sessionStorage.removeItem("vyas_active_job");
@@ -692,6 +710,18 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
           setApiError(job.error || "Evaluation failed");
           changeStage("apiError");
           sessionStorage.removeItem("vyas_active_job");
+        } else if (job.status === "needs_question") {
+          // The backend could not read any printed question and is waiting for
+          // the student to type one. The old poller handled only "done" and
+          // "error", so this state span forever on the evaluating screen.
+          clearInterval(pollRef.current);
+          sessionStorage.removeItem("vyas_active_job");
+          changeStage("noQuestion");
+        } else if (job.status === "cancelled") {
+          // Same class of bug: a cancelled job never left the spinner.
+          clearInterval(pollRef.current);
+          sessionStorage.removeItem("vyas_active_job");
+          reset();
         }
       } catch (e) {
         if (httpStatus === 404 || httpStatus === 403) {
@@ -830,13 +860,38 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   // Resume job on reload
   useEffect(() => {
     const activeJid = sessionStorage.getItem("vyas_active_job");
-    if (activeJid) {
-      setJobId(activeJid);
-      changeStage("evaluating");
-      setEvalType("ai");
-      setApiProgress({ percent: 0, message: "Reconnecting to your evaluation..." });
-      startPolling(activeJid);
-    }
+    if (!activeJid) return;
+    // Only resume if the job is genuinely still running. The old version
+    // forced stage="evaluating" on every mount as long as the key existed, so
+    // pressing Back and reloading dropped you straight back onto the
+    // copy-checking screen for a job that had already finished — and if the
+    // job had ended in a state the poller did not handle, the key was never
+    // cleared and you could never get out.
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/jobs/${activeJid}`, { headers: authHeader() });
+        if (!r.ok) { sessionStorage.removeItem("vyas_active_job"); return; }
+        const job = await r.json();
+        if (["done", "error", "cancelled", "needs_question"].includes(job.status)) {
+          sessionStorage.removeItem("vyas_active_job");
+          if (job.status === "done" && job.result) {
+            setApiResult(job.result);
+            // Store the raw path. openResult() asks the backend for a signed
+            // link at click time, because a new tab cannot send an auth header.
+            if (job.pdf_url) setPdfDownloadUrl(job.pdf_url);
+            changeStage("result");
+          }
+          return;
+        }
+        setJobId(activeJid);
+        setEvalType("ai");
+        setApiProgress({ percent: job.percent || 0, message: "Reconnecting to your evaluation…" });
+        changeStage("evaluating");
+        startPolling(activeJid);
+      } catch (e) {
+        sessionStorage.removeItem("vyas_active_job");
+      }
+    })();
   }, []); // eslint-disable-line
 
   useEffect(() => { if (stage === "result") { window.scrollTo(0, 0); } }, [stage]);
@@ -851,22 +906,44 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
   useEffect(() => {
     if (!apiProgress) return;
     const pct = apiProgress.percent || 0;
-    const newStep = pct < 25 ? 0 : pct < 60 ? 1 : pct < 85 ? 2 : 3;
+    // evalSteps.length (not length-1) is the "everything finished" state. The
+    // old ceiling was 3, i.e. the LAST step, so at 100% that row stayed
+    // `active` and its three dots pulsed forever under a "Done" heading.
+    const newStep = pct >= 100 ? evalSteps.length
+                  : pct < 25 ? 0 : pct < 60 ? 1 : pct < 85 ? 2 : 3;
     setStep(newStep);
   }, [apiProgress]); // eslint-disable-line
 
   // Use real results if available, else sample data
   const activeResult = apiResult || null;
-  const activeQuestions = Array.isArray(activeResult?.questions) 
-    ? activeResult.questions 
-    : (Array.isArray(activeResult?.data?.questions) ? activeResult.data.questions : []);
+  // The backend payload is {success, code, total_marks, ..., data:{questions,
+  // overall_macro_comments, booklet_verdict, top_three_actions, warnings}}.
+  // The old code read activeResult.overall_macro_comments — top level, where
+  // it is undefined — so the entire "Overall Feedback" block silently never
+  // rendered. Everything macro now goes through `resultData`.
+  const resultData = activeResult?.data || activeResult || {};
+  const activeQuestions = Array.isArray(resultData?.questions)
+    ? resultData.questions
+    : (Array.isArray(activeResult?.questions) ? activeResult.questions : []);
+  const macroComments = Array.isArray(resultData?.overall_macro_comments)
+    ? resultData.overall_macro_comments : [];
+  const topActions = Array.isArray(resultData?.top_three_actions)
+    ? resultData.top_three_actions : [];
+  const bookletVerdict = resultData?.booklet_verdict || "";
+  const resultWarnings = Array.isArray(activeResult?.warnings)
+    ? activeResult.warnings
+    : (Array.isArray(resultData?.warnings) ? resultData.warnings : []);
+  // A question the engine could not mark is excluded from the total, never
+  // shown as a zero.
+  const scoredQuestions = activeQuestions.filter(q => q.status !== "not_evaluated");
+  const unmarkedCount = activeQuestions.length - scoredQuestions.length;
   const avg = S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length;
   const awarded = Math.round((avg / 10) * marks * 10) / 10;
   const totalAwarded = activeResult
-    ? (activeResult.total_marks ?? activeQuestions.reduce((a, q) => a + (parseFloat(q.awarded_marks) || 0), 0))
+    ? (activeResult.total_marks ?? scoredQuestions.reduce((a, q) => a + (parseFloat(q.awarded_marks) || 0), 0))
     : awarded;
   const totalOutOf = activeResult
-    ? (activeResult.out_of ?? activeQuestions.reduce((a, q) => a + (parseFloat(q.max_marks) || 0), 0))
+    ? (activeResult.out_of ?? scoredQuestions.reduce((a, q) => a + (parseFloat(q.max_marks) || 0), 0))
     : marks;
   const pdfUrl = pdfDownloadUrl || null;
 
@@ -897,6 +974,39 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     <div style={{ minHeight: "100vh", background: C.cream, fontFamily: ff.body, color: C.ink, position: "relative", overflow: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Serif+Devanagari:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+        /* ---- responsive: phone, tablet, laptop ----
+           The old build had one fixed layout. Everything below scales the
+           shell rather than the individual screens, so no screen has to know
+           what device it is on. */
+        html { -webkit-text-size-adjust: 100%; }
+        body { overscroll-behavior-y: none; }
+        .vyas-shell { max-width: 760px; margin: 0 auto; padding: 0 20px 48px; width: 100%; }
+        @media (min-width: 1024px) { .vyas-shell { max-width: 900px; padding: 0 32px 64px; } }
+        @media (min-width: 768px) and (max-width: 1023px) { .vyas-shell { max-width: 700px; padding: 0 28px 56px; } }
+        @media (max-width: 520px) {
+          .vyas-shell { padding: 0 14px 40px; }
+          h1 { font-size: 21px !important; }
+          h2 { font-size: 18px !important; }
+        }
+        /* Tap targets stay at least 44px on touch devices, and iOS does not
+           zoom when a field is focused if the font is at least 16px. */
+        @media (pointer: coarse) {
+          .vyas-btn, button, a.vyas-btn { min-height: 44px; }
+          input, select, textarea { font-size: 16px !important; }
+        }
+        /* Notch-safe on iPhone. */
+        @supports (padding: max(0px)) {
+          .vyas-shell { padding-left: max(14px, env(safe-area-inset-left));
+                        padding-right: max(14px, env(safe-area-inset-right)); }
+        }
+        img, svg { max-width: 100%; height: auto; }
+        * { -webkit-tap-highlight-color: transparent; }
+        :focus-visible { outline: 2.5px solid #C9A227; outline-offset: 2px; border-radius: 6px; }
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after { animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
         * { box-sizing: border-box; }
 
         /* ---- base transitions ---- */
@@ -989,11 +1099,11 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
         backdropFilter: "blur(12px)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ position: "relative" }}>
+          <div style={{ position: "relative", cursor: "pointer" }} onClick={() => changeStage("mode")}>
             <div style={{ position: "absolute", inset: -4, borderRadius: "50%", background: `radial-gradient(circle, ${C.gold}44 0%, transparent 70%)`, animation: "glowPulse 2s ease-in-out infinite" }} />
             <Logo size={46} />
           </div>
-          <div style={{ lineHeight: 1.2 }}>
+          <div style={{ lineHeight: 1.2, cursor: "pointer" }} onClick={() => changeStage("mode")}>
             <div style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 700, color: C.cream, letterSpacing: 2,
               textShadow: `0 0 20px ${C.gold}55` }}>VYAS</div>
             <div style={{ fontFamily: ff.body, fontSize: 11, color: C.goldSoft, letterSpacing: 0.5 }}>{cfg.portal[lang]}</div>
@@ -1063,58 +1173,18 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
         </div>
       </header>
 
-      <main style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px 80px", position: "relative", zIndex: 1 }}>
+      <main className="vyas-shell" style={{ paddingTop: 32, position: "relative", zIndex: 1 }}>
         <ErrorBoundary>
         {/* -------- HISTORY -------- */}
+        {/* History is now its own full screen (History.jsx), not a panel
+            squeezed under the header. It carries the aggregate numbers a
+            student actually cares about — average, best, and whether the
+            recent five are better than the five before. */}
         {showHistory && (
-          <div className="fade-in" style={{ background: C.paper, borderRadius: 24, padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.1)", marginBottom: 32, border: `1px solid ${C.gold}44` }}>
-            <h2 style={{ color: C.maroon, marginTop: 0 }}>My Submissions</h2>
-
-            {/* Live / Active jobs */}
-            {activeJobs.length > 0 && (
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.inkSoft, letterSpacing: 0.6, marginBottom: 10 }}>IN PROGRESS</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {activeJobs.map(j => (
-                    <div key={j.job_id} onClick={() => resumeJob(j.job_id)} className="vyas-btn" style={{ padding: "14px 18px", border: `1.5px solid ${C.gold}66`, borderRadius: 12, background: "#FFFDF4", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left" }}>
-                      <div>
-                        <div style={{ fontWeight: 600, color: C.ink, fontSize: 14 }}>{j.meta?.exam || "UPSC"} {j.meta?.paper ? `— ${j.meta.paper}` : ""}</div>
-                        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 3 }}>{j.message || j.stage} · {j.percent}%{j.eta_seconds > 0 && j.status !== "cancelled" && j.status !== "error" ? ` · ~${Math.ceil(j.eta_seconds / 60)} min left` : ""}</div>
-                      </div>
-                      {j.status === "cancelled" || j.status === "error" ? (
-                        <div style={{ width: 120, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-                          <X color="#dc3545" size={24} strokeWidth={3} />
-                        </div>
-                      ) : (
-                        <div style={{ width: 120, height: 6, background: "#E7D9BE", borderRadius: 4, overflow: "hidden" }}>
-                          <div style={{ width: `${j.percent}%`, height: "100%", background: C.gold, borderRadius: 4, transition: "width .5s ease" }} />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Completed submissions */}
-            {!historyList ? <p>Loading...</p> : historyList.length === 0 ? <p style={{ color: C.inkSoft }}>No completed submissions yet.</p> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
-                {historyList.map(sub => (
-                  <div key={sub.code} style={{ padding: 16, border: `1px solid ${C.gold}33`, borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff" }}>
-                    <div>
-                      <div style={{ fontWeight: 600, color: C.ink }}>{sub.exam} {sub.paper && `— ${sub.paper}`}</div>
-                      <div style={{ fontSize: 13, color: C.inkSoft }}>{new Date(sub.created * 1000).toLocaleString()} · {sub.total_marks} / {sub.out_of} marks</div>
-                    </div>
-                    {sub.pdf_url && (
-                      <a href={`${API_BASE}${sub.pdf_url}`} target="_blank" rel="noreferrer" style={{ background: C.maroon, color: C.cream, border: "none", borderRadius: 12, padding: "8px 16px", fontWeight: 600, fontSize: 13, textDecoration: "none" }}>
-                        <Download size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "middle" }} /> PDF
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <History
+            onClose={() => setShowHistory(false)}
+            onResume={(jid) => { setShowHistory(false); resumeJob(jid); }}
+          />
         )}
 
         {/* -------- MODE -------- */}
@@ -1385,105 +1455,22 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
         )}
 
         {/* -------- RESULT -------- */}
+        {/* -------- RESULT -------- */}
         {stage === "result" && (
-          <div className="fade-in">
-            {!showAnalysis ? (
-              <div style={{ textAlign: "center", paddingTop: 20 }}>
-                <div style={{ width: 80, height: 80, borderRadius: "50%", background: C.gold, display: "grid", placeItems: "center", margin: "0 auto 20px", boxShadow: "0 8px 24px rgba(201,162,39,0.3)" }}>
-                  <Check size={40} color={C.maroon} strokeWidth={3} />
-                </div>
-                <h1 style={{ fontFamily: ff.display, fontSize: 28, fontWeight: 700, color: C.maroon, margin: "0 0 12px" }}>
-                  Your copy checked successfully!
-                </h1>
-                
-                <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 20, padding: "30px", margin: "24px auto", maxWidth: 320, display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <Medallion value={totalAwarded} max={totalOutOf || marks} marksLabel={t.marksLabel} ff={ff} />
-                  <div style={{ fontFamily: ff.display, fontSize: 26, fontWeight: 700, color: C.maroon, marginTop: 16 }}>
-                    {activeResult ? `${totalAwarded.toFixed(1)} / ${totalOutOf}` : verdict(S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length, lang)}
-                  </div>
-                  <div style={{ fontSize: 14, color: C.inkSoft, fontWeight: 600, marginTop: 4 }}>Total Score</div>
-                </div>
-
-                <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 24 }}>
-                  <button className="vyas-btn" onClick={() => setShowAnalysis(true)} style={{ ...primaryBtn, padding: "14px 24px" }}>
-                    <Sparkles size={18} /> View Detailed Analysis
-                  </button>
-                  {pdfUrl ? (
-                    <button className="vyas-btn" onClick={() => window.open(pdfUrl, '_blank')} style={{ ...outlineBtn, textDecoration: "none", padding: "14px 24px" }}>
-                      <Download size={18} /> {t.downloadPdf}
-                    </button>
-                  ) : (
-                    <button className="vyas-btn" style={{ ...outlineBtn, opacity: 0.5, cursor: "not-allowed", padding: "14px 24px" }}>
-                      <Download size={18} /> {t.downloadPdf}
-                    </button>
-                  )}
-                </div>
-                <div style={{ marginTop: 24 }}>
-                  <button className="vyas-btn" onClick={reset} style={{ background: "transparent", color: C.inkSoft, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                    <RotateCcw size={16} style={{ verticalAlign: "middle", marginRight: 6 }} /> Evaluate Another Copy
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div style={{ display: "flex", alignItems: "center", marginBottom: 24, gap: 12 }}>
-                  <button onClick={() => setShowAnalysis(false)} style={{ background: C.cream, border: "none", width: 40, height: 40, borderRadius: "50%", display: "grid", placeItems: "center", cursor: "pointer", color: C.maroon }}>
-                    <ArrowRight size={20} style={{ transform: "rotate(180deg)" }} />
-                  </button>
-                  <h2 style={{ fontFamily: ff.display, fontSize: 22, fontWeight: 700, color: C.maroon, margin: 0 }}>Detailed Analysis</h2>
-                </div>
-
-                {/* Score Header */}
-                <div style={{ background: C.maroon, borderRadius: 20, padding: "28px 24px", display: "flex", gap: 26, alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
-                  <Medallion value={totalAwarded} max={totalOutOf || marks} marksLabel={t.marksLabel} ff={ff} />
-                  <div style={{ flex: 1, minWidth: 220 }}>
-                    <div style={{ fontFamily: ff.body, fontSize: 12, letterSpacing: 0.5, color: C.goldSoft, fontWeight: 600, marginBottom: 8 }}>{ctxLine}</div>
-                    <div style={{ fontFamily: ff.display, fontSize: 22, fontWeight: 700, color: C.cream, lineHeight: 1.3, marginBottom: 8 }}>
-                      {activeResult ? `${totalAwarded.toFixed(1)} / ${totalOutOf} marks` : verdict(S.dimensions.reduce((a, d) => a + d.score, 0) / S.dimensions.length, lang)}
-                    </div>
-                    {activeResult && activeResult.booklet_verdict && (
-                      <div style={{ fontFamily: ff.body, fontSize: 13.5, color: C.goldSoft }}>{activeResult.booklet_verdict}</div>
-                    )}
-                    {!activeResult && <div style={{ fontFamily: ff.body, fontSize: 13.5, color: C.goldSoft }}>{S.note.label} <b style={{ color: C.cream }}>{S.note.value}</b> {S.note.explain}</div>}
-                  </div>
-                </div>
-
-                {/* Macro comments */}
-                {activeResult && activeResult.overall_macro_comments && Array.isArray(activeResult.overall_macro_comments) && activeResult.overall_macro_comments.length > 0 && (
-                  <div style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderRadius: 16, padding: "20px 22px", marginBottom: 24 }}>
-                    <div style={{ fontFamily: ff.display, fontSize: 16, fontWeight: 700, color: C.maroon, marginBottom: 12 }}>Overall Feedback</div>
-                    {activeResult.overall_macro_comments.map((c, i) => (
-                      <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                        <div style={{ width: 20, height: 20, borderRadius: "50%", background: C.creamDeep, display: "grid", placeItems: "center", flexShrink: 0 }}><Sparkles size={12} color={C.maroon} /></div>
-                        <span style={{ fontFamily: ff.body, fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{c}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Per-question results */}
-                {activeResult && activeQuestions.length > 0 && activeQuestions.map((q, qi) => {
-                  const scorePercent = (parseFloat(q.awarded_marks || 0) / (parseFloat(q.max_marks) || 1)) * 100;
-                  const borderCol = scorePercent >= 60 ? "#4CAF50" : scorePercent <= 40 ? "#F44336" : C.gold;
-                  return (
-                    <div key={qi} style={{ background: C.paper, border: `1.5px solid ${C.creamDeep}`, borderLeft: `5px solid ${borderCol}`, borderRadius: 16, padding: "20px 22px", marginBottom: 18 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                        <div style={{ fontFamily: ff.display, fontSize: 17, fontWeight: 700, color: C.maroon }}>Q{q.q_no}</div>
-                        <div style={{ fontFamily: ff.display, fontSize: 20, fontWeight: 700, color: borderCol }}>{parseFloat(q.awarded_marks || 0).toFixed(1)} / {q.max_marks}</div>
-                      </div>
-                      <div style={{ fontFamily: ff.body, fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.5 }}>{q.detected_question}</div>
-                      {q.grid && typeof q.grid === 'object' && Object.entries(q.grid).map(([k, v]) => (
-                        <div key={k} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: C.inkSoft, minWidth: 160, textTransform: "capitalize" }}>{k.replace(/_/g, " ")}</span>
-                          <span style={{ fontSize: 12.5, color: C.ink }}>{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <ResultView
+            questions={activeQuestions}
+            totalAwarded={totalAwarded}
+            totalOutOf={totalOutOf}
+            macroComments={macroComments}
+            topActions={topActions}
+            bookletVerdict={bookletVerdict}
+            warnings={resultWarnings}
+            unmarkedCount={unmarkedCount}
+            pdfUrl={pdfUrl}
+            contextLine={ctxLine}
+            timeTaken={evalTimeTaken}
+            onReset={reset}
+          />
         )}
               </ErrorBoundary>
       </main>
