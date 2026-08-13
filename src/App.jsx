@@ -753,7 +753,43 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     startPolling(jid);
   };
 
-  const submitToBackend = async (overrideCredits = false) => {
+
+  const handleBulkUpload = async (files) => {
+    if (!window.confirm(`Start bulk upload of ${files.length} copies?`)) return;
+    setApiProgress({ percent: 10, message: "Bulk uploading..." });
+    changeStage("evaluating");
+    let count = 0;
+    
+    // Refresh Firebase token once before bulk
+    if (fbUser) {
+      const freshTok = await idToken();
+      if (freshTok) setToken(freshTok);
+    }
+    
+    for (let f of files) {
+      count++;
+      setApiProgress({ percent: Math.round((count/files.length)*100), message: `Uploading ${count}/${files.length}...` });
+      
+      const form = new FormData();
+      form.append("answer", f);
+      if (qpFileRef.current) form.append("question_paper", qpFileRef.current);
+      form.append("mode", mode);
+      form.append("exam", examId);
+      if (paperId) form.append("paper", paperId);
+      const subject = SUBJECT_BY_PAPER[`${examId}:${paperId}`] || RUBRIC_SUBJECT[rubric];
+      if (subject) form.append("subject", subject);
+      form.append("eval_mode", "ai");
+      
+      try {
+        await fetch(`${API_BASE}/api/submit`, { method: "POST", headers: authHeader(), body: form });
+      } catch (err) { console.error("Bulk upload err:", err); }
+    }
+    fetchHistory();
+    setShowHistory(true);
+    reset();
+  };
+
+  const submitToBackend = async (overrideCredits = false, selectedEvalMode = "ai", targetStage = "evaluating") => {
     setApiError(null);
     setApiResult(null);
     setApiProgress({ percent: 0, message: "Uploading…" });
@@ -768,7 +804,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
       
       pendingSubmitRef.current = false;
       // We only change the stage to evaluating AFTER we confirm they have credits.
-      changeStage("evaluating");
+      changeStage(targetStage);
 
       // Refresh Firebase token before each submit
       if (fbUser) {
@@ -780,6 +816,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
       if (ansFileRef.current) form.append("answer", ansFileRef.current);
       if (mode === "custom" && qpFileRef.current) form.append("question_paper", qpFileRef.current);
       form.append("mode", mode);
+      form.append("eval_mode", selectedEvalMode);
       form.append("exam", examId);
       if (paperId) form.append("paper", paperId);
       // Without this the backend received subject=None and every evaluation ran
@@ -828,13 +865,21 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     }
     // If real files are attached, call the backend; otherwise alert the user
     if (ansFileRef.current) {
-      submitToBackend();
+      submitToBackend(false, "ai", "evaluating");
     } else {
       alert("No answer copy found! Please go back and re-upload your file.");
       reset();
     }
   };
-  const sendToMentor = () => { setEvalType("mentor"); changeStage("mentorSent"); };
+  const sendToMentor = () => {
+    setEvalType("mentor");
+    if (ansFileRef.current) {
+      submitToBackend(false, "mentor", "mentorSent");
+    } else {
+      alert("No answer copy found!");
+      reset();
+    }
+  };
   const cancelJob = async () => {
     if (jobId) {
       try {
@@ -886,7 +931,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
         setJobId(activeJid);
         setEvalType("ai");
         setApiProgress({ percent: job.percent || 0, message: "Reconnecting to your evaluation…" });
-        changeStage("evaluating");
+        changeStage(targetStage);
         startPolling(activeJid);
       } catch (e) {
         sessionStorage.removeItem("vyas_active_job");
@@ -963,7 +1008,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
     setShowPricing(false); 
     if (pendingSubmitRef.current) {
       pendingSubmitRef.current = false;
-      submitToBackend(true);
+      submitToBackend(true, evalType || "ai", evalType === "mentor" ? "mentorSent" : "evaluating");
     }
   }} onClose={()=>{
     pendingSubmitRef.current = false;
@@ -1269,9 +1314,9 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                 <UploadSlot index="1" label={t.qPaper} done={qUp} uploadedLabel={t.uploaded} tapLabel={t.tapUpload} inputId="up-q"
                   onPick={(id) => document.getElementById(id).click()}
                   onChange={(e) => { qpFileRef.current = e.target.files[0]; setQUp(true); }} ff={ff} />
-                <UploadSlot index="2" label={t.answerCopy} done={aUp} uploadedLabel={t.uploaded} tapLabel={t.tapUpload} inputId="up-a"
+                <UploadSlot index="2" label={t.answerCopy} done={aUp} uploadedLabel={t.uploaded} tapLabel={t.tapUpload} inputId="up-a" multiple={true}
                   onPick={(id) => document.getElementById(id).click()}
-                  onChange={(e) => { ansFileRef.current = e.target.files[0]; setAUp(true); }} ff={ff} />
+                  onChange={(e) => { if (e.target.files.length > 1) { handleBulkUpload(e.target.files); } else { ansFileRef.current = e.target.files[0]; setAUp(true); } }} ff={ff} />
                 <FormatChips label={t.formats} />
                 <div>
                   <button className="vyas-btn" disabled={!(qUp && aUp)} onClick={proceedFromQuestion}
@@ -1291,7 +1336,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
                   <div style={{ width: 58, height: 58, borderRadius: "50%", background: C.cream, display: "grid", placeItems: "center" }}><Upload size={25} color={C.maroon} /></div>
                   <div style={{ fontFamily: ff.body, fontWeight: 600, color: C.ink, fontSize: 15, textAlign: "center" }}>{aUp ? `✓ ${t.uploaded}` : t.answerWithQ}</div>
                   <div style={{ fontFamily: ff.body, fontSize: 13, color: C.inkSoft, textAlign: "center" }}>{t.answerHint}</div>
-                  <input id="up-ca" type="file" accept={ACCEPT} hidden onChange={(e) => { ansFileRef.current = e.target.files[0]; scanForQuestion(false); }} />
+                  <input id="up-ca" type="file" accept={ACCEPT} hidden multiple onChange={(e) => { if (e.target.files.length > 1) { handleBulkUpload(e.target.files); } else { ansFileRef.current = e.target.files[0]; scanForQuestion(false); } }} />
                 </button>
                 <FormatChips label={t.formats} />
                 <div style={{ marginTop: 16, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -1479,7 +1524,7 @@ function VyasUIInternal({ examId: initialExam = "UPSC", token = "" }) {
 }
 
 // ---- Upload slot (full mode) ----
-function UploadSlot({ index, label, done, uploadedLabel, tapLabel, inputId, onPick, onChange, ff }) {
+function UploadSlot({ index, label, done, uploadedLabel, tapLabel, inputId, onPick, onChange, ff, multiple=false }) {
   return (
     <>
       <button onClick={() => onPick(inputId)} className="vyas-btn"
@@ -1493,7 +1538,7 @@ function UploadSlot({ index, label, done, uploadedLabel, tapLabel, inputId, onPi
         </div>
         {!done && <Upload size={20} color={C.maroon} />}
       </button>
-      <input id={inputId} type="file" accept={ACCEPT} hidden onChange={onChange} />
+      <input id={inputId} type="file" accept={ACCEPT} hidden onChange={onChange} multiple={multiple} />
     </>
   );
 }
